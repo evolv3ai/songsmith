@@ -3,7 +3,7 @@ name = "songsmith-studio"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "A desktop cockpit that runs the YouTube production workflow by orchestrating Claude over one tool registry."
+description = "Songsmith Studio — co-write song mocks with Claude."
 
 [lib]
 name = "songsmith_studio_lib"
@@ -19,6 +19,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 song_core = { path = "../../core" }
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

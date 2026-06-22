@@ -2,6 +2,7 @@
 // `cargo test -p song_core export_bindings`.
 export type { Artifact } from "./Artifact";
 export type { Progression } from "./Progression";
+export type { Render } from "./Render";
 export type { Settings } from "./Settings";
 export type { Skill } from "./Skill";
 export type { SkillInput } from "./SkillInput";

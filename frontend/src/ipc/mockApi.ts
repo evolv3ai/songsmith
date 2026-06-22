@@ -44,7 +44,7 @@ function seed(): Any {
         created_at: ts, updated_at: ts,
       },
     ],
-    songs: [], stages: [], artifacts: [], skills, progressions: [],
+    songs: [], stages: [], artifacts: [], skills, progressions: [], renders: [],
     settings: { claude_model: "", claude_bin: "", mcp_token: "mock-token" },
   };
 }
@@ -152,6 +152,10 @@ export async function mockCall<T>(cmd: string, a: Any): Promise<T> {
     case "list_progressions": return r(db.progressions);
     case "save_progression": { const p = { id: uid(), name: a.name, chords: a.chords, created_at: now() }; db.progressions.unshift(p); return r(p); }
     case "delete_progression": db.progressions = db.progressions.filter((x: Any) => x.id !== a.id); return r(undefined);
+    case "list_renders": return r(db.renders.filter((x: Any) => x.song_id === a.songId));
+    case "add_render": { const x = { id: uid(), song_id: a.songId, label: a.label || "Render", file_path: a.filePath, source: a.source || "", notes: a.notes || "", is_pick: false, created_at: now() }; db.renders.unshift(x); return r(x); }
+    case "set_render_pick": { const x = db.renders.find((y: Any) => y.id === a.id); if (a.isPick) db.renders.filter((y: Any) => y.song_id === x.song_id).forEach((y: Any) => (y.is_pick = false)); if (x) x.is_pick = a.isPick; return r(undefined); }
+    case "delete_render": db.renders = db.renders.filter((x: Any) => x.id !== a.id); return r(undefined);
     case "get_settings": return r(db.settings);
     case "set_settings": db.settings = a.settings; return r(db.settings);
     case "list_tools": return r(MOCK_TOOLS);
@@ -169,5 +173,6 @@ const MOCK_TOOLS = [
   "get_artifact","save_artifact","list_artifact_revisions","revert_artifact",
   "list_skills","get_skill","create_skill","update_skill","set_skill_enabled",
   "list_progressions","save_progression","delete_progression",
+  "list_renders","add_render","set_render_pick","delete_render",
   "get_settings","set_settings",
 ].map((name) => ({ name, description: "", destructive: name === "delete_song" || name === "delete_progression" }));

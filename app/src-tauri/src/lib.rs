@@ -167,6 +167,25 @@ async fn delete_progression(state: State<'_, AppState>, id: String) -> R<()> {
     db::delete_progression(&state.conn, &id).await.map_err(e2s)
 }
 
+// ---- Final renders ---------------------------------------------------------
+
+#[tauri::command]
+async fn list_renders(state: State<'_, AppState>, song_id: String) -> R<Vec<Render>> {
+    db::list_renders(&state.conn, &song_id).await.map_err(e2s)
+}
+#[tauri::command]
+async fn add_render(state: State<'_, AppState>, song_id: String, label: String, file_path: String, source: String, notes: String) -> R<Render> {
+    db::create_render(&state.conn, &song_id, &label, &file_path, &source, &notes).await.map_err(e2s)
+}
+#[tauri::command]
+async fn set_render_pick(state: State<'_, AppState>, id: String, is_pick: bool) -> R<()> {
+    db::set_render_pick(&state.conn, &id, is_pick).await.map_err(e2s)
+}
+#[tauri::command]
+async fn delete_render(state: State<'_, AppState>, id: String) -> R<()> {
+    db::delete_render(&state.conn, &id).await.map_err(e2s)
+}
+
 // ---- Settings & meta -------------------------------------------------------
 
 #[tauri::command]
@@ -328,6 +347,8 @@ async fn claude_status(state: State<'_, AppState>) -> R<serde_json::Value> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let dir = app.path().app_data_dir().expect("app data dir");
             std::fs::create_dir_all(&dir).ok();
@@ -369,6 +390,10 @@ pub fn run() {
             list_progressions,
             save_progression,
             delete_progression,
+            list_renders,
+            add_render,
+            set_render_pick,
+            delete_render,
             get_settings,
             set_settings,
             list_tools,

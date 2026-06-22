@@ -5,6 +5,7 @@ import type {
   Artifact,
   Settings,
   Progression,
+  Render,
   Skill,
   SkillInput,
   Song,
@@ -31,6 +32,27 @@ export async function listen<T>(event: string, cb: (payload: T) => void): Promis
     return await listen<T>(event, (e) => cb(e.payload));
   }
   return () => {};
+}
+
+/** Native audio-file picker (Tauri only). Returns the chosen path or null. */
+export async function pickAudioFile(): Promise<string | null> {
+  if (!inTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const res = await open({
+    multiple: false,
+    filters: [{ name: "Audio", extensions: ["mp3", "wav", "aiff", "aif", "m4a", "flac", "ogg"] }],
+  });
+  return typeof res === "string" ? res : null;
+}
+export async function openFile(path: string) {
+  if (!inTauri) return;
+  const { openPath } = await import("@tauri-apps/plugin-opener");
+  await openPath(path);
+}
+export async function revealFile(path: string) {
+  if (!inTauri) return;
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealItemInDir(path);
 }
 
 export type ToolInfo = { name: string; description: string; destructive: boolean };
@@ -76,6 +98,13 @@ export const api = {
   listProgressions: () => call<Progression[]>("list_progressions"),
   saveProgression: (name: string, chords: string[]) => call<Progression>("save_progression", { name, chords }),
   deleteProgression: (id: string) => call<void>("delete_progression", { id }),
+
+  // final renders (audio versions referenced on disk)
+  listRenders: (songId: string) => call<Render[]>("list_renders", { songId }),
+  addRender: (songId: string, label: string, filePath: string, source: string, notes: string) =>
+    call<Render>("add_render", { songId, label, filePath, source, notes }),
+  setRenderPick: (id: string, isPick: boolean) => call<void>("set_render_pick", { id, isPick }),
+  deleteRender: (id: string) => call<void>("delete_render", { id }),
 
   // settings & meta
   getSettings: () => call<Settings>("get_settings"),

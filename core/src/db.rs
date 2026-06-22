@@ -58,6 +58,12 @@ pub async fn migrate(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS progression (
           id TEXT PRIMARY KEY, name TEXT NOT NULL, chords TEXT NOT NULL, created_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS render (
+          id TEXT PRIMARY KEY, song_id TEXT NOT NULL REFERENCES song(id),
+          label TEXT, file_path TEXT NOT NULL, source TEXT, notes TEXT,
+          is_pick INTEGER NOT NULL DEFAULT 0, created_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_render_song ON render(song_id);
         CREATE TABLE IF NOT EXISTS setting (key TEXT PRIMARY KEY, value TEXT);
         "#,
     )
@@ -218,7 +224,48 @@ pub async fn set_song_current_stage(conn: &Connection, id: &str, stage_type: &st
 pub async fn delete_song(conn: &Connection, id: &str) -> Result<()> {
     conn.execute("DELETE FROM artifact WHERE song_id = ?1", params![id]).await?;
     conn.execute("DELETE FROM stage WHERE song_id = ?1", params![id]).await?;
+    conn.execute("DELETE FROM render WHERE song_id = ?1", params![id]).await?;
     conn.execute("DELETE FROM song WHERE id = ?1", params![id]).await?;
+    Ok(())
+}
+
+// ---- Final renders (audio versions referenced on disk) ---------------------
+
+pub async fn list_renders(conn: &Connection, song_id: &str) -> Result<Vec<Render>> {
+    let mut rows = conn.query(
+        "SELECT id, song_id, label, file_path, source, notes, is_pick, created_at FROM render WHERE song_id = ?1 ORDER BY created_at DESC",
+        params![song_id],
+    ).await?;
+    let mut out = Vec::new();
+    while let Some(r) = rows.next().await? {
+        out.push(Render {
+            id: s(&r, 0), song_id: s(&r, 1), label: s(&r, 2), file_path: s(&r, 3),
+            source: s(&r, 4), notes: s(&r, 5), is_pick: i(&r, 6) != 0, created_at: s(&r, 7),
+        });
+    }
+    Ok(out)
+}
+pub async fn create_render(conn: &Connection, song_id: &str, label: &str, file_path: &str, source: &str, notes: &str) -> Result<Render> {
+    let id = new_id();
+    let ts = now();
+    conn.execute(
+        "INSERT INTO render (id, song_id, label, file_path, source, notes, is_pick, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7)",
+        params![id.clone(), song_id, label, file_path, source, notes, ts.clone()],
+    ).await?;
+    Ok(Render { id, song_id: song_id.into(), label: label.into(), file_path: file_path.into(), source: source.into(), notes: notes.into(), is_pick: false, created_at: ts })
+}
+pub async fn set_render_pick(conn: &Connection, id: &str, pick: bool) -> Result<()> {
+    if pick {
+        // one pick per song
+        if let Some(r) = conn.query("SELECT song_id FROM render WHERE id = ?1", params![id]).await?.next().await? {
+            conn.execute("UPDATE render SET is_pick = 0 WHERE song_id = ?1", params![s(&r, 0)]).await?;
+        }
+    }
+    conn.execute("UPDATE render SET is_pick = ?2 WHERE id = ?1", params![id, if pick { 1i64 } else { 0 }]).await?;
+    Ok(())
+}
+pub async fn delete_render(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM render WHERE id = ?1", params![id]).await?;
     Ok(())
 }
 

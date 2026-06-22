@@ -1,0 +1,59 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, pickAudioFile, openFile, revealFile, inTauri } from "../ipc/api";
+
+const baseName = (p: string) => p.split("/").pop() ?? p;
+
+export function FinalRenders({ songId }: { songId: string }) {
+  const qc = useQueryClient();
+  const renders = useQuery({ queryKey: ["renders", songId], queryFn: () => api.listRenders(songId) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["renders", songId] });
+
+  const add = useMutation({
+    mutationFn: async () => {
+      const path = await pickAudioFile();
+      if (!path) return null;
+      return api.addRender(songId, baseName(path), path, "", "");
+    },
+    onSuccess: (v) => v && invalidate(),
+  });
+  const pick = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => api.setRenderPick(id, on), onSuccess: invalidate });
+  const del = useMutation({ mutationFn: (id: string) => api.deleteRender(id), onSuccess: invalidate });
+
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <div>
+          <h2 style={{ margin: 0 }}>🎧 Final renders</h2>
+          <span className="muted">Drop in the generated audio versions (Suno / Udio / Ableton). Files stay on disk; Songsmith just references them.</span>
+        </div>
+        <button className="primary" onClick={() => add.mutate()} disabled={!inTauri || add.isPending}>
+          {add.isPending ? "…" : "+ Add version"}
+        </button>
+      </div>
+      {!inTauri && <div className="banner warn" style={{ marginTop: 10 }}>File picking works in the desktop app.</div>}
+
+      {renders.data && renders.data.length === 0 && (
+        <div className="empty">No renders yet — generate audio from the prompt, then add the file here.</div>
+      )}
+
+      {renders.data?.map((rd) => (
+        <div key={rd.id} className="list-item" style={{ marginTop: 8, borderColor: rd.is_pick ? "var(--accent-dim)" : undefined }}>
+          <div className="col" style={{ gap: 3 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <b>{rd.label}</b>
+              {rd.is_pick && <span className="badge done">★ pick</span>}
+              {rd.source && <span className="faint">{rd.source}</span>}
+            </div>
+            <span className="faint" style={{ maxWidth: 520, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rd.file_path}</span>
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="sm" onClick={() => openFile(rd.file_path)}>▶ play</button>
+            <button className="sm" onClick={() => revealFile(rd.file_path)}>reveal</button>
+            <button className="sm" onClick={() => pick.mutate({ id: rd.id, on: !rd.is_pick })}>{rd.is_pick ? "unpick" : "★ pick"}</button>
+            <button className="sm danger" onClick={() => del.mutate(rd.id)}>remove</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

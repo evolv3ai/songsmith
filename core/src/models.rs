@@ -129,6 +129,21 @@ pub struct StyleInput {
     pub themes: String,
 }
 
+/// A final generated audio version of a song, referenced by file path on disk
+/// (never stored in the DB). A song can have many — Suno/Udio/Ableton takes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/ipc/generated/")]
+pub struct Render {
+    pub id: String,
+    pub song_id: String,
+    pub label: String,
+    pub file_path: String,
+    pub source: String,
+    pub notes: String,
+    pub is_pick: bool,
+    pub created_at: String,
+}
+
 /// A saved, reusable chord progression (built in the Chord Builder) that can be
 /// imported into any song section.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -8,6 +8,7 @@ import { ArtifactPanel } from "../components/ArtifactPanel";
 import { AIRunPanel } from "../components/AIRunPanel";
 import { Composer } from "../components/Composer";
 import { StageChat } from "../components/StageChat";
+import { FinalRenders } from "../components/FinalRenders";
 
 function artifactData(content: string): any {
   try {
@@ -132,6 +133,8 @@ export function SongWorkspace() {
           <p className="faint">Approved outputs from earlier stages carry forward as context to the stage you run.</p>
         </div>
       </div>
+
+      <FinalRenders songId={id} />
 
       {confirmDelete && (
         <div className="modal-bg" onClick={() => setConfirmDelete(false)}>
