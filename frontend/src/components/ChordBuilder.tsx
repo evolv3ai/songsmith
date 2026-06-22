@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../ipc/api";
 import { parseChord, chordMidi, NOTE_NAMES } from "../music/theory";
 import { playChord } from "../music/synth";
-import { diagramSvg, diagramSvgShape, chartSvg, downloadSvg } from "../music/diagrams";
+import { diagramSvg, chartSvg, downloadSvg } from "../music/diagrams";
 import { QUALITY_OPTIONS, guitarFrets, guitarCount, chordPcsIdx, chordMidis } from "../music/engineAdapter";
 import type { ChordQuality } from "../lib/music/types";
 import { CircleOfFifths } from "./CircleOfFifths";
+import { GuitarView } from "./GuitarView";
 
 const labelFor = (q: ChordQuality) => QUALITY_OPTIONS.find(([, e]) => e === q)?.[0] ?? q;
 const suffix = (q: ChordQuality) => { const l = labelFor(q); return l === "maj" ? "" : l; };
@@ -78,7 +79,7 @@ export function ChordBuilder() {
                     <span className="faint">{shape.label} · {v + 1} of {count}</span>
                     <button className="sm" onClick={() => setVIdx((i) => (i + 1) % count)} disabled={count < 2}>Next ›</button>
                   </div>
-                  <div dangerouslySetInnerHTML={{ __html: diagramSvgShape(shape, built) }} />
+                  <GuitarView frets={shape.frets} />
                 </>
               ) : <span className="faint">(no guitar shape for this chord — see Piano)</span>
             ) : <MiniPiano pcs={pcs} />}
