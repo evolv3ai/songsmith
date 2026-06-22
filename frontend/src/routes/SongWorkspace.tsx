@@ -10,6 +10,7 @@ import { Composer } from "../components/Composer";
 import { LyricsEditor } from "../components/LyricsEditor";
 import { StageChat } from "../components/StageChat";
 import { FinalRenders } from "../components/FinalRenders";
+import { SongSheet } from "../components/SongSheet";
 
 function artifactData(content: string): any {
   try {
@@ -143,6 +144,8 @@ export function SongWorkspace() {
           <p className="faint">Approved outputs from earlier stages carry forward as context to the stage you run.</p>
         </div>
       </div>
+
+      <SongSheet title={v.title || "Untitled song"} subtitle={`${preset.name} · ${v.key_root} ${v.key_mode} · ${String(v.bpm)} BPM`} stages={song.data.stages} />
 
       <FinalRenders songId={id} />
 

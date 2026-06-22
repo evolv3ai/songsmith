@@ -57,6 +57,58 @@ export function chartSvg(names: string[], title = "Chord chart"): string {
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
 }
 
+type Sheet = { title: string; subtitle: string; sections: { label: string; chords: string[]; lyrics: string[] }[] };
+
+/** A printable lead-sheet for a whole song: header + per-section chords + lyrics. */
+export function songSheetSvg(s: Sheet): { svg: string; width: number; height: number } {
+  const W = 760, pad = 28;
+  let y = pad + 8;
+  const rows: string[] = [];
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  rows.push(`<text x="${pad}" y="${y}" fill="${DOT}" font-size="24" font-weight="bold" font-family="monospace">${esc(s.title)}</text>`);
+  y += 22;
+  rows.push(`<text x="${pad}" y="${y}" fill="${LINE}" font-size="12" font-family="monospace">${esc(s.subtitle)}</text>`);
+  y += 26;
+  for (const sec of s.sections) {
+    rows.push(`<line x1="${pad}" y1="${y - 12}" x2="${W - pad}" y2="${y - 12}" stroke="${LINE}"/>`);
+    rows.push(`<text x="${pad}" y="${y + 4}" fill="${INK}" font-size="14" font-weight="bold" font-family="monospace">${esc(sec.label)}</text>`);
+    if (sec.chords.length) rows.push(`<text x="${pad + 140}" y="${y + 4}" fill="${DOT}" font-size="13" font-family="monospace">${esc(sec.chords.join("  "))}</text>`);
+    y += 22;
+    for (const line of sec.lyrics) {
+      rows.push(`<text x="${pad}" y="${y}" fill="${INK}" font-size="13" font-family="monospace">${esc(line)}</text>`);
+      y += 18;
+    }
+    y += 12;
+  }
+  const H = y + pad;
+  const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    `<rect width="${W}" height="${H}" fill="#0e0f10"/>${rows.join("")}</svg>`;
+  return { svg, width: W, height: H };
+}
+
+/** Rasterize an SVG to PNG and download it. */
+export function downloadPng(svg: string, width: number, height: number, filename: string, scale = 2) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const ctx = canvas.getContext("2d")!;
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, "image/png");
+  };
+  img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+}
+
 export function downloadSvg(svg: string, filename: string) {
   const blob = new Blob([svg], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
