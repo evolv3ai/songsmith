@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../ipc/api";
-import { parseChord, chordMidi, NOTE_NAMES } from "../music/theory";
+import { NOTE_NAMES } from "../music/theory";
 import { playChord } from "../music/synth";
 import { diagramSvg, chartSvg, downloadSvg } from "../music/diagrams";
-import { QUALITY_OPTIONS, guitarFrets, guitarCount, chordPcsIdx, voicedMidis, voicedNotes } from "../music/engineAdapter";
+import { QUALITY_OPTIONS, guitarFrets, guitarCount, chordPcsIdx, voicedMidis, voicedNotes, chordMidisByName } from "../music/engineAdapter";
 import type { ChordQuality } from "../lib/music/types";
 import { CircleOfFifths } from "./CircleOfFifths";
 import { GuitarView } from "./GuitarView";
@@ -118,7 +118,7 @@ export function ChordBuilder() {
             <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 8 }}>
               {prog.map((c, i) => (
                 <div key={i} className="col" style={{ alignItems: "center", gap: 2 }}>
-                  <div dangerouslySetInnerHTML={{ __html: diagramSvg(c) }} onClick={() => { const p = parseChord(c); if (p) playChord(chordMidi(p)); }} style={{ cursor: "pointer" }} />
+                  <div dangerouslySetInnerHTML={{ __html: diagramSvg(c) }} onClick={() => { const m = chordMidisByName(c); if (m.length) playChord(m); }} style={{ cursor: "pointer" }} />
                   <button className="sm ghost danger" onClick={() => setProg((pr) => pr.filter((_, j) => j !== i))}>remove</button>
                 </div>
               ))}

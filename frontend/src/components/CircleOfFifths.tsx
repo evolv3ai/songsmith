@@ -1,5 +1,6 @@
 import { playChord } from "../music/synth";
-import { parseChord, chordMidi, NOTE_NAMES } from "../music/theory";
+import { NOTE_NAMES } from "../music/theory";
+import { chordMidisByName } from "../music/engineAdapter";
 
 // clockwise from top: C G D A E B F# Db Ab Eb Bb F
 const MAJ_PC = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
@@ -18,9 +19,8 @@ export function CircleOfFifths({
 }) {
   const size = 220, c = size / 2, rOut = 92, rIn = 60;
   const pick = (pc: number, q: string) => {
-    const name = NOTE_NAMES[pc] + q;
-    const p = parseChord(name);
-    if (p) playChord(chordMidi(p));
+    const m = chordMidisByName(NOTE_NAMES[pc] + q);
+    if (m.length) playChord(m);
     onPick(pc, q);
   };
   const node = (i: number, r: number, lbl: string, pc: number, q: string) => {

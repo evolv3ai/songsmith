@@ -7,7 +7,10 @@ import { getChordPitchClasses } from "../lib/music/theory/chords";
 import { parseChordSymbol } from "../lib/music/theory/parse-chord";
 import { guitarVoicing, guitarVoicingCount } from "../lib/music/theory/voicings/guitar";
 import { pianoVoicing } from "../lib/music/theory/voicings/piano";
-import type { GuitarShape } from "./guitar";
+
+/** A guitar fingering for rendering: absolute fret per string (low E→high e;
+ *  -1 = muted, 0 = open), the diagram window start, and the shape name. */
+export type GuitarShape = { frets: number[]; baseFret: number; label: string };
 
 const noteMidi = (n: { pitchClass: string; octave: number }) => PITCH_CLASSES.indexOf(n.pitchClass as any) + (n.octave + 1) * 12;
 

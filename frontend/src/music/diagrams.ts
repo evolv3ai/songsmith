@@ -2,8 +2,7 @@
 // chord chart you can play from.
 
 import { NOTE_NAMES } from "./theory";
-import type { GuitarShape } from "./guitar";
-import { guitarFretsByName, chordPcsByName } from "./engineAdapter";
+import { guitarFretsByName, chordPcsByName, type GuitarShape } from "./engineAdapter";
 
 const INK = "#e8e6e0";
 const LINE = "#5f666c";
