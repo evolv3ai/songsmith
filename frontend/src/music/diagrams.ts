@@ -1,8 +1,9 @@
 // SVG chord-diagram builders — for inline display and for exporting a printable
 // chord chart you can play from.
 
-import { parseChord, NOTE_NAMES } from "./theory";
-import { guitarShape, type GuitarShape } from "./guitar";
+import { NOTE_NAMES } from "./theory";
+import type { GuitarShape } from "./guitar";
+import { guitarFretsByName, chordPcsByName } from "./engineAdapter";
 
 const INK = "#e8e6e0";
 const LINE = "#5f666c";
@@ -36,7 +37,7 @@ export function diagramSvgShape(sh: GuitarShape | null, name: string): string {
 
 /** Standalone SVG for a chord's best voicing (chips, etc.). */
 export function diagramSvg(name: string): string {
-  return diagramSvgShape(guitarShape(name), name);
+  return diagramSvgShape(guitarFretsByName(name), name);
 }
 
 /** A printable chart for a progression (grid of best-voicing diagrams + notes). */
@@ -49,9 +50,9 @@ export function chartSvg(names: string[], title = "Chord chart"): string {
     `<text x="${pad}" y="26" fill="${DOT}" font-size="16" font-weight="bold" font-family="monospace">${title}</text>`;
   names.forEach((n, i) => {
     const cx = pad + (i % cols) * cw, cy = top + Math.floor(i / cols) * ch;
-    const notes = parseChord(n)?.pcs.map((pc) => NOTE_NAMES[pc]).join(" ") ?? "";
+    const notes = chordPcsByName(n).map((pc) => NOTE_NAMES[pc]).join(" ");
     body += `<text x="${cx + 43}" y="${cy + 12}" fill="${INK}" font-size="13" font-weight="bold" text-anchor="middle" font-family="monospace">${n}</text>`;
-    body += guitarInner(guitarShape(n), cx, cy);
+    body += guitarInner(guitarFretsByName(n), cx, cy);
     body += `<text x="${cx + 43}" y="${cy + 122}" fill="${LINE}" font-size="9" text-anchor="middle" font-family="monospace">${notes}</text>`;
   });
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;

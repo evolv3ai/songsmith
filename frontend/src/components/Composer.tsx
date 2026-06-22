@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../ipc/api";
-import { parseChord, chordMidi, diatonicChords, pitchClassOf, NOTE_NAMES } from "../music/theory";
+import { diatonicChords, pitchClassOf, NOTE_NAMES } from "../music/theory";
+import { isValidName, chordMidisByName, chordPcsByName } from "../music/engineAdapter";
 import { playChord, playSequence } from "../music/synth";
 import { ImportProgression } from "./ImportProgression";
 
@@ -72,10 +73,10 @@ export function Composer({
   const removeChord = (si: number, ci: number) => mutate((s) => { s[si].chords.splice(ci, 1); return s; });
 
   const selChord = selected ? sections[selected.s]?.chords[selected.c] : null;
-  const selParsed = selChord ? parseChord(selChord.name) : null;
-  const playOne = (name: string) => { const p = parseChord(name); if (p) playChord(chordMidi(p)); };
+  const selPcs = selChord ? chordPcsByName(selChord.name) : null;
+  const playOne = (name: string) => { const m = chordMidisByName(name); if (m.length) playChord(m); };
   const playSection = (si: number) => {
-    const steps = sections[si].chords.map((c) => { const p = parseChord(c.name); return { notes: p ? chordMidi(p) : [], beats: c.beats }; }).filter((s) => s.notes.length);
+    const steps = sections[si].chords.map((c) => ({ notes: chordMidisByName(c.name), beats: c.beats })).filter((s) => s.notes.length);
     playSequence(steps, 120, (i) => setPlayingIdx(i < 0 ? null : { s: si, c: i }));
   };
 
@@ -125,7 +126,7 @@ export function Composer({
             {sec.chords.map((c, ci) => {
               const active = selected?.s === si && selected?.c === ci;
               const playing = playingIdx?.s === si && playingIdx?.c === ci;
-              const ok = !!parseChord(c.name);
+              const ok = isValidName(c.name);
               return (
                 <div key={c.id} className="chord-cell" style={{ borderColor: playing ? "var(--accent)" : active ? "var(--accent-dim)" : ok ? "var(--line)" : "var(--danger)" }} onClick={() => setSelected({ s: si, c: ci })}>
                   <input value={c.name} onChange={(e) => setChordName(si, ci, e.target.value)} placeholder="Am" style={{ width: 56, padding: "2px 4px", textAlign: "center", border: "none", background: "transparent" }} />
@@ -142,14 +143,14 @@ export function Composer({
         </div>
       ))}
 
-      {selParsed && (
+      {selChord && selPcs && selPcs.length > 0 && (
         <div className="card">
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <h3>Voicing — {selParsed.name}</h3>
-            <button className="sm" onClick={() => playChord(chordMidi(selParsed))}>♪ play</button>
+            <h3>Voicing — {selChord.name}</h3>
+            <button className="sm" onClick={() => playChord(chordMidisByName(selChord.name))}>♪ play</button>
           </div>
-          <PianoVoicing pcs={selParsed.pcs} />
-          <div className="faint" style={{ marginTop: 6 }}>notes: {selParsed.pcs.map((pc) => NOTE_NAMES[pc]).join(" · ")}{selParsed.quality && ` · quality: ${selParsed.quality}`}</div>
+          <PianoVoicing pcs={selPcs} />
+          <div className="faint" style={{ marginTop: 6 }}>notes: {selPcs.map((pc) => NOTE_NAMES[pc]).join(" · ")}</div>
         </div>
       )}
     </div>

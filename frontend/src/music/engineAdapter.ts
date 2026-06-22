@@ -4,6 +4,7 @@
 
 import { PITCH_CLASSES, type ChordQuality } from "../lib/music/types";
 import { getChordPitchClasses } from "../lib/music/theory/chords";
+import { parseChordSymbol } from "../lib/music/theory/parse-chord";
 import { guitarVoicing, guitarVoicingCount } from "../lib/music/theory/voicings/guitar";
 import type { GuitarShape } from "./guitar";
 
@@ -49,4 +50,31 @@ export function guitarFrets(rootIdx: number, quality: ChordQuality, voicingIndex
   const pressed = frets.filter((f) => f > 0);
   const baseFret = pressed.length && Math.max(...pressed) > 4 ? Math.min(...pressed) : 1;
   return { frets, baseFret, label: v.shapeName ?? "voicing" };
+}
+
+// ---- name-based variants (for Composer chips / export / playback) ----------
+
+type Sel = { rootIdx: number; quality: ChordQuality; pcs: number[] };
+export function nameToSel(name: string): Sel | null {
+  const p = parseChordSymbol(name);
+  if (!p) return null;
+  return { rootIdx: pcIdx(p.root), quality: p.quality, pcs: p.pitchClasses.map((pc) => pcIdx(pc)) };
+}
+export function isValidName(name: string): boolean {
+  return parseChordSymbol(name) != null;
+}
+export function chordPcsByName(name: string): number[] {
+  return nameToSel(name)?.pcs ?? [];
+}
+export function chordMidisByName(name: string, base = 48): number[] {
+  let prev = -1;
+  return chordPcsByName(name).map((pc) => { let n = base + pc; while (n <= prev) n += 12; prev = n; return n; });
+}
+export function guitarCountByName(name: string): number {
+  const s = nameToSel(name);
+  return s ? guitarCount(s.rootIdx, s.quality) : 0;
+}
+export function guitarFretsByName(name: string, voicingIndex = 0): GuitarShape | null {
+  const s = nameToSel(name);
+  return s ? guitarFrets(s.rootIdx, s.quality, voicingIndex) : null;
 }
