@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, listen } from "../ipc/api";
 import type { StylePreset, StyleInput } from "../ipc/generated";
+import { PresetChat } from "../components/PresetChat";
 
 const EMPTY: StyleInput = {
   name: "", genre: "", mood: "", influences: "", key_tempo_feel: "", vocal_range: "", themes: "",
@@ -77,6 +78,7 @@ function PresetForm({ initial, editingId, onDone }: { initial: StyleInput; editi
           {save.isPending ? "Saving…" : editingId ? "Save changes" : "Create preset"}
         </button>
       </div>
+      {editingId && <PresetChat presetId={editingId} current={form} onApplied={(p) => setForm({ name: p.name, genre: p.genre, mood: p.mood, influences: p.influences, key_tempo_feel: p.key_tempo_feel, vocal_range: p.vocal_range, themes: p.themes })} />}
     </div>
   );
 }
