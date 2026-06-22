@@ -2,16 +2,14 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../ipc/api";
 import { parseChord, chordMidi, NOTE_NAMES } from "../music/theory";
-import { guitarVoicings } from "../music/guitar";
 import { playChord } from "../music/synth";
 import { diagramSvg, diagramSvgShape, chartSvg, downloadSvg } from "../music/diagrams";
+import { QUALITY_OPTIONS, guitarFrets, guitarCount, chordPcsIdx, chordMidis } from "../music/engineAdapter";
+import type { ChordQuality } from "../lib/music/types";
 import { CircleOfFifths } from "./CircleOfFifths";
 
-const QUALITIES: [string, string][] = [
-  ["maj", ""], ["m", "m"], ["dim", "dim"], ["aug", "aug"], ["sus2", "sus2"], ["sus4", "sus4"],
-  ["6", "6"], ["m6", "m6"], ["maj7", "maj7"], ["m7", "m7"], ["7", "7"], ["m7b5", "m7b5"],
-  ["dim7", "dim7"], ["add9", "add9"], ["9", "9"],
-];
+const labelFor = (q: ChordQuality) => QUALITY_OPTIONS.find(([, e]) => e === q)?.[0] ?? q;
+const suffix = (q: ChordQuality) => { const l = labelFor(q); return l === "maj" ? "" : l; };
 
 function MiniPiano({ pcs }: { pcs: number[] }) {
   const set = new Set(pcs);
@@ -27,24 +25,22 @@ function MiniPiano({ pcs }: { pcs: number[] }) {
 
 export function ChordBuilder() {
   const [root, setRoot] = useState(0);
-  const [quality, setQuality] = useState("");
+  const [quality, setQuality] = useState<ChordQuality>("maj");
   const [prog, setProg] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [view, setView] = useState<"guitar" | "piano">("guitar");
   const [vIdx, setVIdx] = useState(0);
   const qc = useQueryClient();
 
-  const built = NOTE_NAMES[root] + quality;
-  const parsed = parseChord(built);
-  const voicings = guitarVoicings(built);
-  const v = voicings.length ? Math.min(vIdx, voicings.length - 1) : 0;
+  const built = NOTE_NAMES[root] + suffix(quality);
+  const pcs = chordPcsIdx(root, quality);
+  const count = guitarCount(root, quality);
+  const v = count ? ((vIdx % count) + count) % count : 0;
+  const shape = count ? guitarFrets(root, quality, v) : null;
   useEffect(() => setVIdx(0), [root, quality]);
-  const saved = useQuery({ queryKey: ["progressions"], queryFn: api.listProgressions });
 
-  const save = useMutation({
-    mutationFn: () => api.saveProgression(name.trim() || "Untitled progression", prog),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["progressions"] }); setName(""); },
-  });
+  const saved = useQuery({ queryKey: ["progressions"], queryFn: api.listProgressions });
+  const save = useMutation({ mutationFn: () => api.saveProgression(name.trim() || "Untitled progression", prog), onSuccess: () => { qc.invalidateQueries({ queryKey: ["progressions"] }); setName(""); } });
   const del = useMutation({ mutationFn: (id: string) => api.deleteProgression(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["progressions"] }) });
 
   return (
@@ -58,13 +54,13 @@ export function ChordBuilder() {
           </div>
           <label>Quality</label>
           <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
-            {QUALITIES.map(([lbl, q]) => (<button key={lbl} className={"sm" + (q === quality ? " primary" : "")} onClick={() => setQuality(q)}>{lbl}</button>))}
+            {QUALITY_OPTIONS.map(([lbl, q]) => (<button key={q} className={"sm" + (q === quality ? " primary" : "")} onClick={() => setQuality(q)}>{lbl}</button>))}
           </div>
 
           <div className="row" style={{ justifyContent: "space-between", marginTop: 12, alignItems: "center" }}>
             <div className="row" style={{ gap: 8, alignItems: "center" }}>
               <b style={{ fontSize: 18 }}>{built}</b>
-              <button className="sm" onClick={() => parsed && playChord(chordMidi(parsed))}>♪ play</button>
+              <button className="sm" onClick={() => playChord(chordMidis(root, quality))}>♪ play</button>
               <button className="sm primary" onClick={() => setProg((p) => [...p, built])}>+ add</button>
             </div>
             <div className="row" style={{ gap: 4 }}>
@@ -72,27 +68,28 @@ export function ChordBuilder() {
               <button className={"sm" + (view === "piano" ? " primary" : "")} onClick={() => setView("piano")}>Piano</button>
             </div>
           </div>
+
           <div style={{ marginTop: 10, minHeight: 70 }}>
             {view === "guitar" ? (
-              voicings.length ? (
+              shape ? (
                 <>
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", maxWidth: 220 }}>
-                    <button className="sm" onClick={() => setVIdx((i) => (i - 1 + voicings.length) % voicings.length)} disabled={voicings.length < 2}>‹ Prev</button>
-                    <span className="faint">{voicings[v].label} · {v + 1} of {voicings.length}</span>
-                    <button className="sm" onClick={() => setVIdx((i) => (i + 1) % voicings.length)} disabled={voicings.length < 2}>Next ›</button>
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", maxWidth: 240 }}>
+                    <button className="sm" onClick={() => setVIdx((i) => (i - 1 + count) % count)} disabled={count < 2}>‹ Prev</button>
+                    <span className="faint">{shape.label} · {v + 1} of {count}</span>
+                    <button className="sm" onClick={() => setVIdx((i) => (i + 1) % count)} disabled={count < 2}>Next ›</button>
                   </div>
-                  <div dangerouslySetInnerHTML={{ __html: diagramSvgShape(voicings[v], built) }} />
+                  <div dangerouslySetInnerHTML={{ __html: diagramSvgShape(shape, built) }} />
                 </>
               ) : <span className="faint">(no guitar shape for this chord — see Piano)</span>
-            ) : parsed && <MiniPiano pcs={parsed.pcs} />}
+            ) : <MiniPiano pcs={pcs} />}
           </div>
-          {parsed && <div className="faint">{parsed.pcs.map((pc) => NOTE_NAMES[pc]).join(" · ")}</div>}
+          <div className="faint">{pcs.map((pc) => NOTE_NAMES[pc]).join(" · ")}</div>
         </div>
 
         <div className="card">
           <h3>Circle of fifths</h3>
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <CircleOfFifths rootPc={root} quality={quality} onPick={(pc, q) => { setRoot(pc); setQuality(q); }} />
+            <CircleOfFifths rootPc={root} quality={quality === "min" ? "m" : ""} onPick={(pc, q) => { setRoot(pc); setQuality(q === "m" ? "min" : "maj"); }} />
           </div>
           <p className="faint">Outer ring = major, inner = relative minor. Click to pick &amp; hear.</p>
         </div>

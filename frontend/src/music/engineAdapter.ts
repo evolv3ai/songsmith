@@ -1,0 +1,52 @@
+// Adapter: drives the UI from the ported music-kb engine (real CAGED voicings,
+// correct chord tones) instead of my hand-rolled shapes. Keeps the existing
+// diagram/synth/piano renderers, just fed with engine data.
+
+import { PITCH_CLASSES, type ChordQuality } from "../lib/music/types";
+import { getChordPitchClasses } from "../lib/music/theory/chords";
+import { guitarVoicing, guitarVoicingCount } from "../lib/music/theory/voicings/guitar";
+import type { GuitarShape } from "./guitar";
+
+/** Quality buttons: display label → engine ChordQuality. */
+export const QUALITY_OPTIONS: [string, ChordQuality][] = [
+  ["maj", "maj"], ["m", "min"], ["dim", "dim"], ["aug", "aug"], ["sus2", "sus2"], ["sus4", "sus4"],
+  ["6", "6"], ["m6", "m6"], ["maj7", "maj7"], ["m7", "min7"], ["7", "dom7"], ["m7b5", "m7b5"],
+  ["dim7", "dim7"], ["mMaj7", "mMaj7"], ["add9", "add9"], ["9", "9"], ["maj9", "maj9"], ["m9", "m9"],
+];
+
+const pcIdx = (pc: string) => PITCH_CLASSES.indexOf(pc as any);
+
+/** Pitch-class indices (0–11) of the chord tones — for the piano view. */
+export function chordPcsIdx(rootIdx: number, quality: ChordQuality): number[] {
+  return getChordPitchClasses(PITCH_CLASSES[rootIdx], quality).map(pcIdx);
+}
+
+/** MIDI notes voiced ascending around the base octave — for playback. */
+export function chordMidis(rootIdx: number, quality: ChordQuality, base = 48): number[] {
+  let prev = -1;
+  return chordPcsIdx(rootIdx, quality).map((pc) => {
+    let n = base + pc;
+    while (n <= prev) n += 12;
+    prev = n;
+    return n;
+  });
+}
+
+/** How many guitar voicings (open + barre shapes) exist for this chord. */
+export function guitarCount(rootIdx: number, quality: ChordQuality): number {
+  return guitarVoicingCount({ root: PITCH_CLASSES[rootIdx], quality, inversion: 0, voicingIndex: 0 });
+}
+
+/** The Nth guitar voicing as a fret-per-string diagram shape, or null. */
+export function guitarFrets(rootIdx: number, quality: ChordQuality, voicingIndex: number): GuitarShape | null {
+  const v = guitarVoicing({ root: PITCH_CLASSES[rootIdx], quality, inversion: 0, voicingIndex });
+  if (!v.positions) return null; // quality has no shape → caller shows piano
+  const frets = [-1, -1, -1, -1, -1, -1];
+  for (const key of v.positions) {
+    const [s, f] = key.split("-").map(Number);
+    if (s >= 0 && s < 6) frets[s] = f;
+  }
+  const pressed = frets.filter((f) => f > 0);
+  const baseFret = pressed.length && Math.max(...pressed) > 4 ? Math.min(...pressed) : 1;
+  return { frets, baseFret, label: v.shapeName ?? "voicing" };
+}
