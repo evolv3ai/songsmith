@@ -7,6 +7,7 @@ import { StageChecklist } from "../components/StageChecklist";
 import { ArtifactPanel } from "../components/ArtifactPanel";
 import { AIRunPanel } from "../components/AIRunPanel";
 import { Composer } from "../components/Composer";
+import { LyricsEditor } from "../components/LyricsEditor";
 import { StageChat } from "../components/StageChat";
 import { FinalRenders } from "../components/FinalRenders";
 
@@ -100,6 +101,15 @@ export function SongWorkspace() {
               keyRoot={v.key_root}
               keyMode={v.key_mode}
               initialData={artifactData(sd.artifact.content)}
+              onChanged={invalidate}
+            />
+          ) : sd?.artifact && sd.stage.type === "lyrics" ? (
+            <LyricsEditor
+              songId={id}
+              stageId={sd.stage.id}
+              kind={sd.artifact.kind}
+              artifactId={sd.artifact.id}
+              content={sd.artifact.content}
               onChanged={invalidate}
             />
           ) : (
