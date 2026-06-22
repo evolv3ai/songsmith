@@ -1,0 +1,12 @@
+//! Songsmith Studio — Rust core.
+//!
+//! Owns all state: models, libSQL persistence, the tool registry, and the stage
+//! agent loop. The Tauri shell and (later) the MCP server are thin layers over
+//! this crate.
+
+pub mod agent;
+pub mod db;
+pub mod models;
+pub mod tools;
+
+pub use models::*;

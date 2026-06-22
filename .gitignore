@@ -1,0 +1,25 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Node / frontend
+node_modules
+frontend/dist
+frontend/node_modules
+
+# Tauri generated
+app/src-tauri/gen
+
+# DB / local data
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+target
+node_modules
+dist
+*.db
+*.db-*
+.DS_Store

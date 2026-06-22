@@ -1,0 +1,22 @@
+[package]
+name = "song_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "song_core"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+ts-rs.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+libsql.workspace = true

@@ -1,0 +1,286 @@
+//! The stage agent loop.
+//!
+//! `run_stage` loads the stage's Skill + the StylePreset + all prior approved
+//! artifacts, calls **Claude** (the user's Claude Code subscription, via the
+//! `claude` CLI), streams the output, and writes the resulting Artifact. There
+//! is no local model — Claude is the engine.
+
+use crate::db;
+use crate::models::*;
+use anyhow::{anyhow, Result};
+use libsql::Connection;
+use serde_json::{json, Value};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+
+/// The artifact `kind` produced by each stage type.
+pub fn kind_for_stage(stage_type: &str) -> &'static str {
+    match stage_type {
+        "concept" => "concept",
+        "structure" => "structure",
+        "chords" => "chords",
+        "lyrics" => "lyrics",
+        "prompt" => "generation_prompt",
+        _ => "artifact",
+    }
+}
+
+pub struct RunOutcome {
+    pub artifact: Artifact,
+    pub raw_output: String,
+}
+
+/// Run a stage. `user_input` carries an optional seed (the producer's own
+/// chords/lyrics/title). `on_token` receives streamed text chunks.
+pub async fn run_stage<F>(
+    conn: &Connection,
+    settings: &Settings,
+    stage_id: &str,
+    user_input: Option<String>,
+    on_token: F,
+) -> Result<RunOutcome>
+where
+    F: Fn(String) + Send,
+{
+    let stage = db::get_stage(conn, stage_id).await?.ok_or_else(|| anyhow!("stage not found"))?;
+    let song = db::get_song(conn, &stage.song_id).await?.ok_or_else(|| anyhow!("song not found"))?;
+    let preset = db::get_preset(conn, &song.style_preset_id).await?.ok_or_else(|| anyhow!("style preset not found"))?;
+    let skill = db::get_active_skill_for_stage(conn, &stage.r#type)
+        .await?
+        .ok_or_else(|| anyhow!("no enabled skill for stage '{}'", stage.r#type))?;
+
+    db::set_stage_status(conn, stage_id, "in_progress").await?;
+    db::set_song_current_stage(conn, &song.id, &stage.r#type).await?;
+    if stage.skill_id.as_deref() != Some(skill.id.as_str()) {
+        db::set_stage_skill(conn, stage_id, &skill.id).await?;
+    }
+
+    let prior = gather_prior_context(conn, &stage.song_id, stage.ordinal).await?;
+    let system = build_system_prompt(&skill, &preset, &song);
+    let user = build_user_prompt(&stage.r#type, &prior, user_input.as_deref());
+
+    let text = call_claude(settings, &system, &user, &on_token).await?;
+    let data = extract_json(&text);
+    let content = json!({ "kind": kind_for_stage(&stage.r#type), "text": text, "data": data }).to_string();
+
+    let artifact = db::save_artifact(conn, &song.id, Some(stage_id), kind_for_stage(&stage.r#type), &content).await?;
+    Ok(RunOutcome { artifact, raw_output: text })
+}
+
+/// Auto-generate a style preset from a seed (name / vibe / reference), grounded
+/// in the style-level skill. Returns a filled `StyleInput`; `name` is verbatim.
+pub async fn generate_style_preset<F>(
+    conn: &Connection,
+    settings: &Settings,
+    seed_name: &str,
+    seed_notes: Option<&str>,
+    on_token: F,
+) -> Result<StyleInput>
+where
+    F: Fn(String) + Send,
+{
+    let method = db::list_skills(conn)
+        .await?
+        .into_iter()
+        .filter(|s| s.stage_type == "style" && s.enabled)
+        .map(|s| format!("# {}\n{}", s.name, s.instructions))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let system = format!(
+        "You design a reusable artist/style preset for a music producer, grounded in the method below.\n\n\
+         {method}\n\n\
+         Be specific and decisive; never name real artists to imitate — describe the sound. \
+         Respond with ONLY a single fenced ```json block of exactly these string keys:\n\
+         {{\"genre\":\"...\",\"mood\":\"...\",\"influences\":\"...\",\"key_tempo_feel\":\"...\",\"vocal_range\":\"...\",\"themes\":\"...\"}}",
+        method = if method.is_empty() { "(no style skill installed)".to_string() } else { method }
+    );
+    let user = format!("Seed / name: {seed_name}\nNotes: {notes}\n\nProduce the style preset JSON now.", notes = seed_notes.unwrap_or("(none)"));
+
+    let text = call_claude(settings, &system, &user, &on_token).await?;
+    let d = extract_json(&text).ok_or_else(|| anyhow!("the model did not return a JSON preset. Raw output:\n{}", text.trim()))?;
+    let g = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    Ok(StyleInput {
+        name: seed_name.to_string(),
+        genre: g("genre"),
+        mood: g("mood"),
+        influences: g("influences"),
+        key_tempo_feel: g("key_tempo_feel"),
+        vocal_range: g("vocal_range"),
+        themes: g("themes"),
+    })
+}
+
+async fn gather_prior_context(conn: &Connection, song_id: &str, ordinal: i64) -> Result<String> {
+    let stages = db::list_stages(conn, song_id).await?;
+    let mut blocks = Vec::new();
+    for s in stages.into_iter().filter(|s| s.ordinal < ordinal) {
+        if let Some(art) = db::current_artifact(conn, &s.id).await? {
+            if !art.approved {
+                continue;
+            }
+            let body = serde_json::from_str::<Value>(&art.content)
+                .ok()
+                .and_then(|v| v.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                .unwrap_or(art.content.clone());
+            blocks.push(format!("### Approved {} output\n{}", stage_label(&s.r#type), body));
+        }
+    }
+    Ok(blocks.join("\n\n"))
+}
+
+fn build_system_prompt(skill: &Skill, preset: &StylePreset, song: &Song) -> String {
+    format!(
+        "{instructions}\n\n\
+         ----- STYLE PRESET (persistent context — read this on every stage) -----\n\
+         Project: {name}\n\
+         Genre: {genre}\n\
+         Mood & energy: {mood}\n\
+         Influences (describe the sound, don't clone): {influences}\n\
+         Key / tempo feel: {ktf}\n\
+         Vocal range: {vr}\n\
+         Recurring themes: {themes}\n\
+         Current song key/tempo: {root} {mode}, {bpm} BPM\n\
+         -----------------------------------------------------------------------\n\
+         Honor the style and themes above. Never name real artists to imitate or quote their lyrics.",
+        instructions = skill.instructions,
+        name = preset.name, genre = preset.genre, mood = preset.mood, influences = preset.influences,
+        ktf = preset.key_tempo_feel, vr = preset.vocal_range, themes = preset.themes,
+        root = song.key_root, mode = song.key_mode, bpm = song.bpm,
+    )
+}
+
+fn build_user_prompt(stage_type: &str, prior: &str, user_input: Option<&str>) -> String {
+    let mut p = String::new();
+    if !prior.is_empty() {
+        p.push_str("Approved outputs from earlier stages (carry these forward):\n\n");
+        p.push_str(prior);
+        p.push_str("\n\n");
+    }
+    if let Some(input) = user_input {
+        if !input.trim().is_empty() {
+            p.push_str("The producer's own seed for this stage (build around it):\n\n");
+            p.push_str(input.trim());
+            p.push_str("\n\n");
+        }
+    }
+    p.push_str(&format!(
+        "Produce the {} now, following your skill exactly. End with the artifact as a single fenced ```json block matching the documented shape.",
+        stage_label(stage_type)
+    ));
+    p
+}
+
+/// Generate text with Claude by driving the `claude` CLI headless with
+/// stream-json. Streams text deltas via `on_token`, returns the final answer.
+async fn call_claude<F>(settings: &Settings, system: &str, user: &str, on_token: &F) -> Result<String>
+where
+    F: Fn(String) + Send,
+{
+    let bin = if settings.claude_bin.is_empty() { "claude".to_string() } else { settings.claude_bin.clone() };
+    let mut cmd = tokio::process::Command::new(&bin);
+    cmd.arg("-p").arg(user)
+        .arg("--append-system-prompt").arg(system)
+        .arg("--output-format").arg("stream-json")
+        .arg("--verbose")
+        .arg("--include-partial-messages")
+        .arg("--no-session-persistence")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    if !settings.claude_model.is_empty() {
+        cmd.arg("--model").arg(&settings.claude_model);
+    }
+
+    let mut child = cmd.spawn().map_err(|e| anyhow!("could not start the claude CLI ({bin}): {e}. Install Claude Code and sign in."))?;
+    let stdout = child.stdout.take().unwrap();
+    let mut lines = tokio::io::BufReader::new(stdout).lines();
+    let (mut result_text, mut assistant_text, mut streamed) = (String::new(), String::new(), String::new());
+
+    while let Some(line) = lines.next_line().await? {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        match v["type"].as_str() {
+            Some("stream_event") => {
+                let ev = &v["event"];
+                if ev["type"] == "content_block_delta" && ev["delta"]["type"] == "text_delta" {
+                    if let Some(tok) = ev["delta"]["text"].as_str() {
+                        if !tok.is_empty() {
+                            streamed.push_str(tok);
+                            on_token(tok.to_string());
+                        }
+                    }
+                }
+            }
+            Some("assistant") => {
+                if let Some(content) = v["message"]["content"].as_array() {
+                    let mut t = String::new();
+                    for b in content {
+                        if b["type"] == "text" {
+                            if let Some(s) = b["text"].as_str() { t.push_str(s); }
+                        }
+                    }
+                    if !t.is_empty() { assistant_text = t; }
+                }
+            }
+            Some("result") => {
+                if let Some(r) = v["result"].as_str() { result_text = r.to_string(); }
+            }
+            _ => {}
+        }
+    }
+
+    let status = child.wait().await?;
+    if !status.success() {
+        let mut err = String::new();
+        if let Some(mut se) = child.stderr.take() {
+            let _ = se.read_to_string(&mut err).await;
+        }
+        let err = err.trim();
+        return Err(anyhow!("claude CLI failed: {}", if err.is_empty() { "is Claude Code signed in? run `claude` once to authenticate." } else { err }));
+    }
+
+    let out = if !result_text.trim().is_empty() { result_text }
+        else if !assistant_text.trim().is_empty() { assistant_text }
+        else { streamed };
+    if out.trim().is_empty() {
+        return Err(anyhow!("claude returned no output"));
+    }
+    Ok(out)
+}
+
+/// Extract the first JSON object from model output (fenced or bare).
+pub fn extract_json(text: &str) -> Option<Value> {
+    if let Some(start) = text.find("```json") {
+        let after = &text[start + 7..];
+        if let Some(end) = after.find("```") {
+            if let Ok(v) = serde_json::from_str::<Value>(after[..end].trim()) {
+                return Some(v);
+            }
+        }
+    }
+    let bytes = text.as_bytes();
+    if let Some(open) = text.find('{') {
+        let (mut depth, mut in_str, mut esc) = (0i32, false, false);
+        for i in open..bytes.len() {
+            let c = bytes[i] as char;
+            if in_str {
+                if esc { esc = false; } else if c == '\\' { esc = true; } else if c == '"' { in_str = false; }
+                continue;
+            }
+            match c {
+                '"' => in_str = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        if let Ok(v) = serde_json::from_str::<Value>(&text[open..=i]) { return Some(v); }
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
+}
