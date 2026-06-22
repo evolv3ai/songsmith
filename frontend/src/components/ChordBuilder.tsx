@@ -4,7 +4,7 @@ import { api } from "../ipc/api";
 import { parseChord, chordMidi, NOTE_NAMES } from "../music/theory";
 import { playChord } from "../music/synth";
 import { diagramSvg, chartSvg, downloadSvg } from "../music/diagrams";
-import { QUALITY_OPTIONS, guitarFrets, guitarCount, chordPcsIdx, chordMidis } from "../music/engineAdapter";
+import { QUALITY_OPTIONS, guitarFrets, guitarCount, chordPcsIdx, voicedMidis, voicedNotes } from "../music/engineAdapter";
 import type { ChordQuality } from "../lib/music/types";
 import { CircleOfFifths } from "./CircleOfFifths";
 import { GuitarView } from "./GuitarView";
@@ -31,14 +31,16 @@ export function ChordBuilder() {
   const [name, setName] = useState("");
   const [view, setView] = useState<"guitar" | "piano">("guitar");
   const [vIdx, setVIdx] = useState(0);
+  const [inversion, setInversion] = useState(0);
   const qc = useQueryClient();
 
   const built = NOTE_NAMES[root] + suffix(quality);
   const pcs = chordPcsIdx(root, quality);
+  const maxInv = Math.max(0, pcs.length - 1);
   const count = guitarCount(root, quality);
   const v = count ? ((vIdx % count) + count) % count : 0;
   const shape = count ? guitarFrets(root, quality, v) : null;
-  useEffect(() => setVIdx(0), [root, quality]);
+  useEffect(() => { setVIdx(0); setInversion(0); }, [root, quality]);
 
   const saved = useQuery({ queryKey: ["progressions"], queryFn: api.listProgressions });
   const save = useMutation({ mutationFn: () => api.saveProgression(name.trim() || "Untitled progression", prog), onSuccess: () => { qc.invalidateQueries({ queryKey: ["progressions"] }); setName(""); } });
@@ -60,14 +62,22 @@ export function ChordBuilder() {
 
           <div className="row" style={{ justifyContent: "space-between", marginTop: 12, alignItems: "center" }}>
             <div className="row" style={{ gap: 8, alignItems: "center" }}>
-              <b style={{ fontSize: 18 }}>{built}</b>
-              <button className="sm" onClick={() => playChord(chordMidis(root, quality))}>♪ play</button>
+              <b style={{ fontSize: 18 }}>{built}{inversion > 0 ? ` (inv ${inversion})` : ""}</b>
+              <button className="sm" onClick={() => playChord(voicedMidis(root, quality, inversion))}>♪ play</button>
               <button className="sm primary" onClick={() => setProg((p) => [...p, built])}>+ add</button>
             </div>
             <div className="row" style={{ gap: 4 }}>
               <button className={"sm" + (view === "guitar" ? " primary" : "")} onClick={() => setView("guitar")}>Guitar</button>
               <button className={"sm" + (view === "piano" ? " primary" : "")} onClick={() => setView("piano")}>Piano</button>
             </div>
+          </div>
+
+          <div className="row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
+            <span className="faint">inversion</span>
+            <button className="sm" onClick={() => setInversion((i) => Math.max(0, i - 1))} disabled={inversion <= 0}>‹</button>
+            <span>{inversion}</span>
+            <button className="sm" onClick={() => setInversion((i) => Math.min(maxInv, i + 1))} disabled={inversion >= maxInv}>›</button>
+            <span className="faint">voiced (low→high): {voicedNotes(root, quality, inversion).join(" · ")}</span>
           </div>
 
           <div style={{ marginTop: 10, minHeight: 70 }}>

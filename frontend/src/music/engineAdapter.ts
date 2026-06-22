@@ -6,7 +6,10 @@ import { PITCH_CLASSES, type ChordQuality } from "../lib/music/types";
 import { getChordPitchClasses } from "../lib/music/theory/chords";
 import { parseChordSymbol } from "../lib/music/theory/parse-chord";
 import { guitarVoicing, guitarVoicingCount } from "../lib/music/theory/voicings/guitar";
+import { pianoVoicing } from "../lib/music/theory/voicings/piano";
 import type { GuitarShape } from "./guitar";
+
+const noteMidi = (n: { pitchClass: string; octave: number }) => PITCH_CLASSES.indexOf(n.pitchClass as any) + (n.octave + 1) * 12;
 
 /** Quality buttons: display label → engine ChordQuality. */
 export const QUALITY_OPTIONS: [string, ChordQuality][] = [
@@ -31,6 +34,15 @@ export function chordMidis(rootIdx: number, quality: ChordQuality, base = 48): n
     prev = n;
     return n;
   });
+}
+
+/** Piano voicing as MIDI, honoring inversion (which chord tone is the bass). */
+export function voicedMidis(rootIdx: number, quality: ChordQuality, inversion: number): number[] {
+  return pianoVoicing({ root: PITCH_CLASSES[rootIdx], quality, inversion, voicingIndex: 0 }).map(noteMidi);
+}
+/** The voiced note names low→high, for display (e.g. first inversion = "E G C"). */
+export function voicedNotes(rootIdx: number, quality: ChordQuality, inversion: number): string[] {
+  return pianoVoicing({ root: PITCH_CLASSES[rootIdx], quality, inversion, voicingIndex: 0 }).map((n) => n.pitchClass);
 }
 
 /** How many guitar voicings (open + barre shapes) exist for this chord. */
