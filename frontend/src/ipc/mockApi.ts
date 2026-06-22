@@ -45,7 +45,7 @@ function seed(): Any {
       },
     ],
     songs: [], stages: [], artifacts: [], skills, progressions: [], renders: [],
-    settings: { claude_model: "", claude_bin: "", mcp_token: "mock-token" },
+    settings: { claude_model: "", claude_bin: "", mcp_token: "mock-token", ableton_mcp: "" },
   };
 }
 
@@ -161,6 +161,7 @@ export async function mockCall<T>(cmd: string, a: Any): Promise<T> {
     case "list_tools": return r(MOCK_TOOLS);
     case "mcp_config": return r({ db_path: "(browser mock)", token: "mock-token", command_hint: "Run the Tauri app for a real MCP config." });
     case "claude_status": return r({ found: false, version: null, model: db.settings.claude_model, bin: "" });
+    case "detect_ableton_mcp": return r({ found: false });
     case "chat_send": return r("mock-session");
     default: throw new Error(`mock: unknown command '${cmd}'`);
   }

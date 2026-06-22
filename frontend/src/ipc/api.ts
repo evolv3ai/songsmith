@@ -112,6 +112,7 @@ export const api = {
   listTools: () => call<ToolInfo[]>("list_tools"),
   mcpConfig: () => call<McpConfig>("mcp_config"),
   claudeStatus: () => call<ClaudeStatus>("claude_status"),
+  detectAbletonMcp: () => call<{ found: boolean; name?: string; entry?: any }>("detect_ableton_mcp"),
   chatSend: (message: string, sessionId?: string) =>
     call<string>("chat_send", { message, sessionId: sessionId ?? null }),
 };

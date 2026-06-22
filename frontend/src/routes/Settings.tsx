@@ -10,6 +10,17 @@ export function SettingsPage() {
   const status = useQuery({ queryKey: ["claude"], queryFn: api.claudeStatus });
   const [form, setForm] = useState<Settings | null>(null);
   const [saved, setSaved] = useState("");
+  const [detectMsg, setDetectMsg] = useState("");
+
+  const detectAbleton = async () => {
+    const r = await api.detectAbletonMcp();
+    if (r.found && r.entry) {
+      setForm((f) => (f ? { ...f, ableton_mcp: JSON.stringify(r.entry, null, 2) } : f));
+      setDetectMsg(`Found "${r.name}" in Claude Desktop — review and Save.`);
+    } else {
+      setDetectMsg("No Ableton server found in Claude Desktop config — paste its { command, args } below.");
+    }
+  };
 
   useEffect(() => { if (settings.data && !form) setForm(settings.data); }, [settings.data]);
   const save = useMutation({ mutationFn: () => api.setSettings(form!), onSuccess: () => setSaved("Saved.") });
@@ -59,6 +70,29 @@ export function SettingsPage() {
             <label>App database</label>
             <div className="artifact-text" style={{ maxHeight: "none" }}>{mcp.data?.db_path}</div>
           </div>
+          <div className="card">
+            <h2>Ableton MCP</h2>
+            <p className="muted">
+              Connect your Ableton MCP server so the in-app Claude can build the song in Ableton.
+              Once connected, ask in any chat: <i>"set up this song's structure in Ableton."</i>
+            </p>
+            <div className="row" style={{ gap: 8, marginBottom: 6 }}>
+              <span className="k">Status</span>
+              {form.ableton_mcp.trim() ? <span className="badge done">connected</span> : <span className="badge pending">not connected</span>}
+            </div>
+            <div className="row" style={{ gap: 8, marginBottom: 6 }}>
+              <button onClick={detectAbleton}>Detect from Claude Desktop</button>
+              {form.ableton_mcp.trim() && <button className="ghost" onClick={() => setForm({ ...form, ableton_mcp: "" })}>disconnect</button>}
+            </div>
+            {detectMsg && <div className="faint" style={{ marginBottom: 6 }}>{detectMsg}</div>}
+            <label>Server config (JSON)</label>
+            <textarea value={form.ableton_mcp} onChange={set("ableton_mcp")} style={{ minHeight: 80, fontSize: 12 }}
+              placeholder={'{ "command": "uvx", "args": ["ableton-mcp"] }'} />
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="primary" onClick={() => save.mutate()}>Save</button>
+            </div>
+          </div>
+
           <div className="card">
             <h2>Tool registry</h2>
             <p className="muted">{tools.data?.length ?? 0} tools — one registry for the UI, the agent, and Claude over MCP.</p>

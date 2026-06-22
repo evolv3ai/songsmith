@@ -78,6 +78,7 @@ const SEED_SKILLS: &[(&str, &str, &str, &str)] = &[
     ("songsmith-lyrics", "Lyricist", "lyrics", include_str!("skills/lyrics.md")),
     ("songsmith-prompt", "Generation Prompt", "prompt", include_str!("skills/prompt.md")),
     ("songsmith-style", "Style Builder", "style", include_str!("skills/style.md")),
+    ("songsmith-ableton", "Ableton Arrange", "ableton", include_str!("skills/ableton.md")),
 ];
 
 fn strip_frontmatter(raw: &str) -> String {
@@ -433,13 +434,14 @@ pub async fn get_settings(conn: &Connection) -> Result<Settings> {
             "claude_model" => st.claude_model = s(&r, 1),
             "claude_bin" => st.claude_bin = s(&r, 1),
             "mcp_token" => st.mcp_token = s(&r, 1),
+            "ableton_mcp" => st.ableton_mcp = s(&r, 1),
             _ => {}
         }
     }
     Ok(st)
 }
 pub async fn set_settings(conn: &Connection, st: &Settings) -> Result<()> {
-    for (k, v) in [("claude_model", &st.claude_model), ("claude_bin", &st.claude_bin), ("mcp_token", &st.mcp_token)] {
+    for (k, v) in [("claude_model", &st.claude_model), ("claude_bin", &st.claude_bin), ("mcp_token", &st.mcp_token), ("ableton_mcp", &st.ableton_mcp)] {
         conn.execute(
             "INSERT INTO setting (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=?2",
             params![k, v.as_str()],

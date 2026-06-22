@@ -3,9 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../ipc/api";
 import type { Skill, SkillInput } from "../ipc/generated";
 
-const STAGE_TYPES = ["concept", "structure", "chords", "lyrics", "prompt", "style"] as const;
+const STAGE_TYPES = ["concept", "structure", "chords", "lyrics", "prompt", "style", "ableton"] as const;
 const LABELS: Record<string, string> = {
-  concept: "Concept", structure: "Structure", chords: "Chords", lyrics: "Lyrics", prompt: "Generation Prompt", style: "Style (preset)",
+  concept: "Concept", structure: "Structure", chords: "Chords", lyrics: "Lyrics", prompt: "Generation Prompt", style: "Style (preset)", ableton: "Ableton (arrange)",
 };
 const EMPTY: SkillInput = { key: "", name: "", stage_type: "concept", instructions: "" };
 

@@ -5,4 +5,9 @@
  * no local model. `claude_model` is an optional override (empty = default);
  * `claude_bin` is the resolved CLI path (empty = `claude` on PATH).
  */
-export type Settings = { claude_model: string, claude_bin: string, mcp_token: string, };
+export type Settings = { claude_model: string, claude_bin: string, mcp_token: string, 
+/**
+ * JSON for an extra MCP server (e.g. Ableton) merged into the chat config —
+ * `{"command":"uvx","args":["ableton-mcp"]}` or `{"url":"http://..."}`. Empty = off.
+ */
+ableton_mcp: string, };

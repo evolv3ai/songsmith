@@ -242,13 +242,41 @@ fn find_shim(resource_dir: Option<std::path::PathBuf>) -> Option<std::path::Path
     c.into_iter().find(|p| p.exists())
 }
 
-fn ensure_mcp_config(app: &tauri::AppHandle, db_path: &str) -> Result<std::path::PathBuf, String> {
+fn ensure_mcp_config(app: &tauri::AppHandle, db_path: &str, ableton: &str) -> Result<std::path::PathBuf, String> {
     let shim = find_shim(app.path().resource_dir().ok()).ok_or("mcp-shim binary not found")?;
-    let cfg = serde_json::json!({ "mcpServers": { "songsmith": { "command": shim.to_string_lossy(), "env": { "SONGSMITH_DB": db_path } } } });
+    let mut servers = serde_json::json!({
+        "songsmith": { "command": shim.to_string_lossy(), "env": { "SONGSMITH_DB": db_path } }
+    });
+    // merge an optional extra MCP server (e.g. Ableton), under the name "ableton"
+    if let Ok(entry) = serde_json::from_str::<serde_json::Value>(ableton.trim()) {
+        if entry.is_object() {
+            servers["ableton"] = entry;
+        }
+    }
+    let cfg = serde_json::json!({ "mcpServers": servers });
     let dir = std::path::Path::new(db_path).parent().ok_or("bad db path")?;
     let path = dir.join("mcp.json");
     std::fs::write(&path, serde_json::to_vec_pretty(&cfg).unwrap()).map_err(e2s)?;
     Ok(path)
+}
+
+/// Try to find an Ableton MCP server in the user's Claude Desktop config so the
+/// user can connect it with one click. Returns the server entry JSON or null.
+#[tauri::command]
+fn detect_ableton_mcp() -> serde_json::Value {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let path = format!("{home}/Library/Application Support/Claude/claude_desktop_config.json");
+    let Ok(txt) = std::fs::read_to_string(&path) else { return serde_json::json!({ "found": false }) };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else { return serde_json::json!({ "found": false }) };
+    if let Some(servers) = v.get("mcpServers").and_then(|m| m.as_object()) {
+        for (name, entry) in servers {
+            let hay = format!("{name} {entry}").to_lowercase();
+            if hay.contains("ableton") {
+                return serde_json::json!({ "found": true, "name": name, "entry": entry });
+            }
+        }
+    }
+    serde_json::json!({ "found": false })
 }
 
 #[tauri::command]
@@ -269,7 +297,8 @@ fn mcp_setup_command(app: tauri::AppHandle, state: State<'_, AppState>) -> serde
 #[tauri::command]
 async fn chat_send(app: tauri::AppHandle, state: State<'_, AppState>, message: String, session_id: Option<String>) -> R<String> {
     let claude = find_claude().ok_or("The `claude` CLI was not found. Install Claude Code and sign in.")?;
-    let cfg = ensure_mcp_config(&app, &state.db_path)?;
+    let settings = db::get_settings(&state.conn).await.map_err(e2s)?;
+    let cfg = ensure_mcp_config(&app, &state.db_path, &settings.ableton_mcp)?;
     let resuming = session_id.is_some();
     let sid = session_id.unwrap_or_else(song_core::db::new_id);
 
@@ -277,7 +306,7 @@ async fn chat_send(app: tauri::AppHandle, state: State<'_, AppState>, message: S
         "-p".into(), message,
         "--output-format".into(), "stream-json".into(), "--verbose".into(),
         "--mcp-config".into(), cfg.to_string_lossy().to_string(),
-        "--allowedTools".into(), "mcp__songsmith".into(),
+        "--allowedTools".into(), "mcp__songsmith".into(), "mcp__ableton".into(),
         "--disallowedTools".into(), "mcp__songsmith__delete_song".into(),
         "--permission-mode".into(), "acceptEdits".into(),
         "-n".into(), "songsmith".into(),
@@ -400,6 +429,7 @@ pub fn run() {
             mcp_config,
             mcp_setup_command,
             claude_status,
+            detect_ableton_mcp,
             chat_send,
         ])
         .run(tauri::generate_context!())
