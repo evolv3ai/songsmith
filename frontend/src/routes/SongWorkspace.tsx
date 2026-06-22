@@ -27,6 +27,7 @@ export function SongWorkspace() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tab, setTab] = useState<"workspace" | "sheet">("workspace");
 
   const song = useQuery({ queryKey: ["song", id], queryFn: () => api.getSong(id) });
   const currentType = song.data?.song.current_stage ?? "concept";
@@ -79,6 +80,13 @@ export function SongWorkspace() {
         </div>
       </div>
 
+      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
+        <button className={"sm" + (tab === "workspace" ? " primary" : "")} onClick={() => setTab("workspace")}>Workspace</button>
+        <button className={"sm" + (tab === "sheet" ? " primary" : "")} onClick={() => setTab("sheet")}>Sheet / play-along</button>
+      </div>
+
+      {tab === "workspace" && (
+      <>
       <div className="workspace">
         <StageChecklist stages={song.data.stages} currentType={currentType} selectedId={activeStageId} onSelect={(s: Stage) => setSelectedId(s.id)} />
 
@@ -145,9 +153,18 @@ export function SongWorkspace() {
         </div>
       </div>
 
-      <SongSheet title={v.title || "Untitled song"} subtitle={`${preset.name} · ${v.key_root} ${v.key_mode} · ${String(v.bpm)} BPM`} stages={song.data.stages} />
-
       <FinalRenders songId={id} />
+      </>
+      )}
+      {tab === "sheet" && (
+        <SongSheet
+          title={v.title || "Untitled song"}
+          subtitle={`${preset.name} · ${v.key_root} ${v.key_mode} · ${String(v.bpm)} BPM`}
+          keyRoot={v.key_root}
+          keyMode={v.key_mode}
+          stages={song.data.stages}
+        />
+      )}
 
       {confirmDelete && (
         <div className="modal-bg" onClick={() => setConfirmDelete(false)}>

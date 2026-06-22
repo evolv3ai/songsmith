@@ -2,29 +2,24 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../ipc/api";
 import type { Stage } from "../ipc/generated";
-import { songSheetSvg, downloadPng } from "../music/diagrams";
+import { pitchClassOf } from "../music/theory";
+import { playAlongSvg, downloadPng } from "../music/diagrams";
 
 function dataOf(content: string | undefined): any {
   if (!content) return null;
-  try {
-    const v = JSON.parse(content);
-    return v?.data ?? null;
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(content)?.data ?? null; } catch { return null; }
 }
 
 export function SongSheet({
-  title, subtitle, stages,
+  title, subtitle, keyRoot, keyMode, stages,
 }: {
-  title: string; subtitle: string; stages: Stage[];
+  title: string; subtitle: string; keyRoot: string; keyMode: string; stages: Stage[];
 }) {
-  const [open, setOpen] = useState(false);
+  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
   const chordsStage = stages.find((s) => s.type === "chords");
   const lyricsStage = stages.find((s) => s.type === "lyrics");
-
-  const chords = useQuery({ queryKey: ["stage", chordsStage?.id], queryFn: () => api.getStage(chordsStage!.id), enabled: open && !!chordsStage });
-  const lyrics = useQuery({ queryKey: ["stage", lyricsStage?.id], queryFn: () => api.getStage(lyricsStage!.id), enabled: open && !!lyricsStage });
+  const chords = useQuery({ queryKey: ["stage", chordsStage?.id], queryFn: () => api.getStage(chordsStage!.id), enabled: !!chordsStage });
+  const lyrics = useQuery({ queryKey: ["stage", lyricsStage?.id], queryFn: () => api.getStage(lyricsStage!.id), enabled: !!lyricsStage });
 
   const sheet = useMemo(() => {
     const cSecs = dataOf(chords.data?.artifact?.content)?.sections ?? [];
@@ -40,28 +35,21 @@ export function SongSheet({
         lyrics: Array.isArray(l?.lines) ? l.lines : typeof l?.text === "string" ? l.text.split("\n") : [],
       };
     });
-    return songSheetSvg({ title, subtitle, sections });
-  }, [chords.data, lyrics.data, title, subtitle]);
+    return playAlongSvg({ title, subtitle, instrument, rootPc: pitchClassOf(keyRoot) ?? 0, mode: keyMode === "major" ? "major" : "minor", sections });
+  }, [chords.data, lyrics.data, title, subtitle, instrument, keyRoot, keyMode]);
 
   return (
-    <div className="card" style={{ marginTop: 14 }}>
-      <div className="row" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => setOpen((o) => !o)}>
-        <div>
-          <h2 style={{ margin: 0 }}>📄 Song sheet</h2>
-          <span className="muted">A lead sheet — key, sections, chords, and lyrics — exportable to PNG.</span>
+    <div>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+        <div className="row" style={{ gap: 4 }}>
+          <button className={"sm" + (instrument === "guitar" ? " primary" : "")} onClick={() => setInstrument("guitar")}>Guitar</button>
+          <button className={"sm" + (instrument === "piano" ? " primary" : "")} onClick={() => setInstrument("piano")}>Piano</button>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          {open && <button className="primary" onClick={(e) => { e.stopPropagation(); downloadPng(sheet.svg, sheet.width, sheet.height, `${title || "song"}.png`); }}>⬇ Export PNG</button>}
-          <button className="sm ghost">{open ? "hide ▾" : "show ▸"}</button>
-        </div>
+        <button className="primary" onClick={() => downloadPng(sheet.svg, sheet.width, sheet.height, `${title || "song"}.png`)}>⬇ Export PNG</button>
       </div>
-      {open && (
-        <div style={{ marginTop: 10, overflow: "auto" }}>
-          {chords.isLoading || lyrics.isLoading
-            ? <div className="empty">Loading…</div>
-            : <div dangerouslySetInnerHTML={{ __html: sheet.svg }} style={{ maxWidth: "100%" }} />}
-        </div>
-      )}
+      {chords.isLoading || lyrics.isLoading
+        ? <div className="empty">Loading…</div>
+        : <div className="card" style={{ overflow: "auto" }} dangerouslySetInnerHTML={{ __html: sheet.svg }} />}
     </div>
   );
 }
