@@ -1,141 +1,127 @@
-# YT Creator Studio
+# Songsmith Studio
 
-**Claude Code for content creators.** A desktop cockpit that runs the whole YouTube
-production workflow by bringing your **Claude subscription** to bear — over **one tool
-registry** — with every stage's work saved and connected per channel.
+**Claude Code for music producers.** A desktop cockpit that co-writes a *song mock* with
+Claude — structure, chords, and lyrics — fast, then hands it off to your pipeline. Claude
+is the engine (your Claude Code subscription, via the `claude` CLI + an MCP server); the app
+is the harness that wraps it with songwriting skills, a per-project style preset, a real
+chord/theory toolkit, and a structured spark-to-mock workflow.
 
-Claude is the engine: it drives the workflow through the `claude` CLI + this app's MCP
-server (the **Chat** tab), and powers the one-click stage runs. There is **no local
-model** — the harness wraps Claude with creator skills, per-channel context, and a
-structured production spec.
+A producer sets a reusable **style preset** (genre, mood, influences, key/tempo feel, vocal
+range, themes), starts a song, and walks a **song spec** — a stage checklist:
 
-A single creator defines a reusable **brand preset** (niche, audience, voice,
-monetization), starts a video, and walks a **production spec** — a stage checklist
-(Idea → Trifecta → Script → Record → Edit → Launch → Upload). The AI produces each
-artifact, the creator reviews/approves, and each approved output feeds the next stage.
-The same tool registry is callable by the UI, a local agent loop, **and Claude over MCP**.
+> **Concept → Structure → Chords → Lyrics → Generation Prompt**
 
-> Built fresh from the spec in [`docs/`](docs/). License: **GPL-3.0**.
+At each stage Claude drafts the part; you **one-click run**, **chat to refine** (per-stage,
+over MCP), or **hand-edit**. Every approved part carries forward, so the song stays coherent.
+The output feeds a real pipeline:
+
+> **Songsmith** (mock: structure + chords + lyrics + generation prompt) → **Ableton** (play
+> the voicings) → **an AI music generator** (e.g. Suno, Udio — audio from lyrics + style) →
+> **back into Ableton** (finish) → **🎧 drop the renders back in and ★ pick the keeper.**
+
+> Forked from the YT Creator Studio harness and reshaped for songwriting. Planning docs in
+> [`resources/`](resources/). License: **GPL-3.0**.
+
+## Highlights
+
+- **Claude is the single engine** — no local model. Stage runs and the Chat tab both drive
+  `claude` headless (stream-json) with this app's MCP server attached, so Claude reads and
+  edits song state through the same tool registry the UI uses.
+- **Per-stage chat** — a collapsible "💬 Chat with Claude about this stage" on every stage;
+  ask for a change and Claude edits that stage's artifact over MCP, and it reloads live.
+- **Real chord engine** — the music-theory + voicing engine is ported from
+  [music-kb](https://github.com/) (`frontend/src/lib/music`, GPL-compatible, `tonal`-backed):
+  correct chord tones, **CAGED + open guitar voicings**, a voicing cycler, scales, inversions.
+- **Chord Builder** (dedicated tab) — circle-of-fifths wheel, root/quality picker, a **full
+  guitar fretboard** + piano voicing, **♪ playback** (Web Audio), save progressions to a
+  reusable library, and **export an SVG chord chart** to play from. Import any saved
+  progression straight into a song section.
+- **Absolute-chord composer** — the Chords stage stores real chord names per section (never
+  collapsed to scale degrees), editable by hand, by palette, by import, or by chat.
+- **Suno-accurate prompts** — the Generation Prompt stage follows current best practice: key +
+  tempo in the **style** line, chords as `[Am]` tags **inline in the lyrics** (not sung).
+- **Final renders** — reference your generated audio versions on disk (multiple takes), play
+  them, reveal in Finder, ★ pick the winner. Audio stays in your DAW-friendly folder.
+- **Extensible skills** — every stage's songwriting method is an editable skill; add custom
+  ones (Nashville numbers, genre structures, lyric techniques, prompt templates).
 
 ## Architecture
 
 ```
-yt-creator-studio/
-├── core/              # Rust core — owns ALL state
+songsmith-studio/
+├── core/                 # Rust core — owns all state
 │   └── src/
-│       ├── models.rs  # BrandPreset, Video, Stage, Artifact, Skill, Settings (+ ts-rs)
-│       ├── db.rs      # libSQL (SQLite-compatible) schema, migrations, CRUD, skill seed
-│       ├── tools.rs   # ToolSpec registry + dispatch — one registry, three callers
-│       ├── agent.rs   # run_stage: skill + preset + prior artifacts → model → artifact
-│       └── skills/     # built-in CGE skill markdown, embedded at compile time
-├── app/src-tauri/     # Tauri v2 shell — IPC commands, event streaming, state
-├── frontend/          # React + TanStack (Router/Query), single styles.css
-│   └── src/ipc/
-│       ├── generated/  # TypeScript types generated from Rust (ts-rs) — never hand-edit
-│       ├── api.ts      # typed wrappers over every command
-│       └── mockApi.ts  # in-memory mock so the UI runs in a plain browser (mock-parity)
-├── mcp-shim/          # stdio MCP server — lets Claude Code drive the same registry
-├── sidecar/           # (Milestone 7) Node youtubei.js service
-└── docs/              # the six planning docs this was built from
+│       ├── models.rs     # StylePreset, Song, Stage, Artifact, Skill, Progression, Render
+│       ├── db.rs         # libSQL schema, migrations, journaled artifacts, CRUD, skill seed
+│       ├── tools.rs      # ToolSpec registry + dispatch — one registry, three callers
+│       ├── agent.rs      # run_stage + call_claude (the claude CLI, stream-json)
+│       └── skills/       # built-in songwriting skill markdown
+├── app/src-tauri/        # Tauri v2 shell — IPC commands, chat_send, dialog/opener plugins
+├── frontend/             # React + TanStack, single styles.css
+│   └── src/
+│       ├── routes/       # /, /presets, /song/$id, /builder, /skills, /chat, /settings
+│       ├── components/   # StageChecklist, Composer, StageChat, ChordBuilder, GuitarView,
+│       │                 #   FinalRenders, ChatPanel, …
+│       ├── lib/music/    # ported music-kb engine (theory, voicings, instruments) + tonal
+│       └── ipc/          # typed bindings + generated/ types (ts-rs) + mockApi.ts
+└── mcp-shim/             # stdio MCP server over the shared DB (server name: "songsmith")
 ```
 
-**Brand presets** can be hand-written or **auto-filled with AI**: type a channel name and
-hit *✨ Auto-fill*, and the `generate_brand_preset` tool drafts the niche, audience, voice,
-and monetization using the brand-level CGE skills (niche validator + monetization).
-
-**Invariant:** the Rust core owns all state. The frontend is a pure view layer; the
-Tauri shell and the MCP shim are thin layers over `core`. The tool registry in
-`core/src/tools.rs` is the single contract shared by the UI, the agent loop, and MCP.
+The **Rust core owns all state**. The frontend is a view layer; the Tauri shell and the MCP
+shim are thin layers over `core`. The registry in `core/src/tools.rs` is the single contract
+shared by the UI, the agent, and Claude over MCP.
 
 ## Prerequisites
 
 - Rust 1.85+ · Node 20+ · cmake
-- **[Claude Code](https://claude.com/claude-code)** installed and signed in — it's the
-  engine. Run `claude` once to authenticate. Settings shows the detected CLI status.
+- **[Claude Code](https://claude.com/claude-code)** installed and signed in — it's the engine.
+  Run `claude` once to authenticate. **Settings → Claude engine** shows the detected status.
 
 ## Run
 
 ```bash
-# install frontend deps (once)
-cd frontend && npm install && cd ..
-
-# launch the desktop app (starts Vite + the Tauri shell)
-cd app/src-tauri && npx tauri dev
+cd frontend && npm install && cd ..           # install JS deps (once)
+make dev                                        # tauri dev — boots Songsmith
+# or build + install into /Applications and launch:
+make install
 ```
 
-The frontend also runs standalone in a browser against the in-memory mock — useful for
-UI work without the backend:
-
-```bash
-cd frontend && npm run dev   # http://localhost:5173
-```
-
-## Chat (the harness)
-
-The **Chat** tab is the core surface: it runs `claude` headless with this app's MCP server
-attached, so you talk to Claude and it reads and updates your workflow — list videos, run a
-stage, draft and save an artifact, approve and advance — all via the shared tool registry,
-streamed live. The MCP wiring is automatic. Stage buttons in the video workspace call Claude
-the same way for one-click runs.
-
-## YouTube data (sidecar)
-
-The Idea stage can pull a muse video's title/author/transcript with the **fetch** button
-— this calls the Node `youtubei.js` sidecar, which the app spawns automatically and caches
-into `video_info_cache`. Manual paste remains the fallback. The sidecar is bundled into the
-packaged app; in dev it's found at `sidecar/index.js` (run `npm install` in `sidecar/` once).
+The frontend also runs standalone in a browser against an in-memory mock (`npm run dev` in
+`frontend/`) for UI work without the backend.
 
 ## Let Claude drive it (MCP)
 
-The Chat tab does this for you. To also drive the harness from your own terminal:
+The **Chat** tab and the per-stage chats wire this automatically. To drive the harness from
+your own terminal:
 
 ```bash
-cargo build -p mcp-shim
-YT_STUDIO_DB="$HOME/Library/Application Support/com.ytcreatorstudio.desktop/yt-creator-studio.db" \
-  claude mcp add yt-studio --scope user -- /path/to/target/release/mcp-shim
+cargo build -p mcp-shim --release
+SONGSMITH_DB="$HOME/Library/Application Support/com.songsmithstudio.desktop/songsmith-studio.db" \
+  claude mcp add songsmith --scope user -- /path/to/target/release/mcp-shim
 ```
 
-Claude can then `list_videos`, `create_brand_preset`, `run_stage`, `approve_stage`, etc.
-— the exact same tools the UI uses. The **Settings** page shows the ready-to-run
-command and the database path.
+Claude can then `list_songs`, `run_stage`, `save_artifact`, `save_progression`, `add_render`,
+etc. — the same tools the UI uses. **Settings → MCP** shows the ready-to-run command.
 
-## Regenerating types
-
-TypeScript types are generated from the Rust models — never hand-edit `frontend/src/ipc/generated/`.
+## Make targets
 
 ```bash
-cargo test -p yt_core export_bindings
+make dev      # tauri dev (hot reload)
+make install  # build .app → /Applications → launch
+make build    # .app only
+make dmg      # distributable .dmg
+make test     # cargo test -p song_core
+make types    # regenerate the TS types from Rust
 ```
 
-A test (`cargo test -p yt_core --lib`) enforces **mock-parity**: every registry tool
-must exist in `mockApi.ts`.
+TypeScript types are generated from the Rust models (ts-rs) — never hand-edit
+`frontend/src/ipc/generated/`. A test enforces **mock-parity**: every registry tool exists in
+`mockApi.ts`.
 
-## Build status (vs. the spec's milestones)
+## Status
 
-| # | Milestone | Status |
-|---|-----------|--------|
-| 1 | Scaffold (Tauri shell, Rust core, React/TanStack, single stylesheet, ts-rs) | ✅ |
-| 2 | Data layer — libSQL schema, migrations, journaled artifact revisions, CRUD | ✅ |
-| 3 | Tool registry + MCP — one registry, three callers; mock-parity test | ✅ |
-| 4 | Presets + new video + stage scaffolding | ✅ |
-| 5 | `run_stage` engine — Claude (streaming, approve→advance, carry context) | ✅ |
-| 6 | Skills library — seeded CGE skills, edit/enable, used by `run_stage` | ✅ |
-| 7 | youtubei.js Node sidecar (video info + transcript), spawned & cached by the core | ✅ |
-| 8 | **Chat** — Claude headless + MCP, drives the workflow conversationally | ✅ |
-| 9 | Settings + `.dmg`/`.app` packaging (unsigned); sidecar + mcp-shim bundled | ✅ |
-
-All nine milestones are implemented. **Claude is the single engine** (the local-AI path
-was removed): stage runs and the Chat tab both drive Claude over the harness MCP server;
-the sidecar fetches & caches real YouTube data; and `tauri build` produces an installable
-`.dmg`. Remaining polish (Apple code-signing/notarization, Windows/Linux) is post-v1.
-
-## Packaging
-
-```bash
-cd app/src-tauri && ../../frontend/node_modules/.bin/tauri build
-# → target/release/bundle/dmg/*.dmg  and  target/release/bundle/macos/*.app
-```
-
-The build is unsigned to start (add Apple Developer secrets to sign/notarize later).
-The Node sidecar is bundled into the app's Resources so the packaged app fetches YouTube
-data without a separate install; `node` must be on the user's PATH.
+The core product is complete and installable: the full spark-to-mock loop runs end to end with
+Claude, the chord engine + builder are wired in, prompts follow Suno best practice, and final
+renders close the pipeline. Remaining polish: an inversion control in the Builder, deleting the
+superseded interim chord helpers, a per-section lyrics editor, and Apple code-signing for the
+`.dmg`.
