@@ -125,3 +125,4 @@ Claude, the chord engine + builder are wired in, prompts follow Suno best practi
 renders close the pipeline. Remaining polish: an inversion control in the Builder, deleting the
 superseded interim chord helpers, a per-section lyrics editor, and Apple code-signing for the
 `.dmg`.
+# songsmith
