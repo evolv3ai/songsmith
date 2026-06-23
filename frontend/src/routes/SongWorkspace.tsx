@@ -17,7 +17,8 @@ import { FinalRenders } from "../components/FinalRenders";
 import { SongSheet } from "../components/SongSheet";
 import { ArrangementBuilder } from "../components/ArrangementBuilder";
 
-function artifactData(content: string): any {
+function artifactData(content: string | undefined): any {
+  if (!content) return null;
   try {
     const v = JSON.parse(content);
     return v?.data ?? null;
@@ -60,6 +61,11 @@ export function SongWorkspace() {
     queryFn: () => api.getStage(activeStageId!),
     enabled: !!activeStageId,
   });
+
+  // chords-stage data feeds the Lyrics editor's per-section chord palette (ChordPro)
+  const chordsStageId = song.data?.stages.find((s) => s.type === "chords")?.id;
+  const chordsStage = useQuery({ queryKey: ["stage", chordsStageId], queryFn: () => api.getStage(chordsStageId!), enabled: !!chordsStageId });
+  const chordsData = artifactData(chordsStage.data?.artifact?.content);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["song", id] });
@@ -196,6 +202,7 @@ export function SongWorkspace() {
               artifactId={sd.artifact.id}
               content={sd.artifact.content}
               onChanged={invalidate}
+              chordsData={chordsData}
             />
           ) : sd?.artifact && sd.stage.type === "prompt" ? (
             <PromptEditor

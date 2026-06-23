@@ -112,6 +112,39 @@ button.sm { padding: 3px 7px; font-size: 11px; }
 }
 .inspector-flyout.open { transform: none; }
 
+/* ChordPro "place chords" editor — chords pinned above the words they land on */
+.cp-lyrics { font-family: var(--mono); font-size: 13px; line-height: 1.2; }
+.cp-line { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; min-height: 34px; padding: 1px 0; }
+.cp-word { display: inline-flex; flex-direction: column; align-items: flex-start; }
+.cp-chord {
+  height: 15px; line-height: 15px; padding: 0 3px; margin: 0; font-size: 11px; font-weight: 700;
+  color: var(--accent); background: none; border: none; cursor: pointer; min-width: 12px; text-align: left;
+}
+.cp-chord:hover { color: #11140a; background: var(--accent); border-radius: 2px; }
+.cp-chord.set { color: var(--accent); }
+/* empty slot: invisible until you hover the word (and only hints "+" while a chord is armed) */
+.cp-chord:empty { opacity: 0; }
+.cp-word:hover .cp-chord.armed:empty { opacity: 0.7; }
+.cp-word:hover .cp-chord.armed:empty::before { content: "+"; }
+.cp-text { padding: 0 3px 1px; cursor: pointer; border-bottom: 1px solid transparent; white-space: pre; }
+.cp-text:hover { border-bottom-color: var(--accent-dim); }
+/* instrumental / wordless section — chords shown as bars instead of a place grid */
+/* drag-to-reorder sections (Chords builder) */
+.drag-handle { cursor: grab; color: var(--ink-faint); font-size: 16px; padding: 0 4px; user-select: none; }
+.drag-handle:active { cursor: grabbing; }
+.section-card.dragging { opacity: 0.45; outline: 1px dashed var(--accent); }
+/* drop-target cue: a bright insertion bar on the edge the dragged section will land */
+.section-card.drop-above, .section-card.drop-below { position: relative; }
+.section-card.drop-above::before, .section-card.drop-below::before {
+  content: ""; position: absolute; left: 0; right: 0; height: 3px;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent); border-radius: 2px;
+}
+.section-card.drop-above::before { top: -5px; }
+.section-card.drop-below::before { bottom: -5px; }
+
+.cp-instrumental { display: flex; flex-direction: column; gap: 6px; }
+.cp-bars { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; }
+
 .main { overflow: auto; padding: 20px 24px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
 .row { display: flex; gap: 8px; align-items: center; }

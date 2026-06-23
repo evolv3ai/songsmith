@@ -76,6 +76,17 @@ export function Composer({
   const addChord = (si: number, name = "") => mutate((s) => { s[si].chords.push({ id: uid(), name, beats: 4 }); return s; });
   const importToSection = (si: number, names: string[]) => mutate((s) => { s[si].chords = names.map((n) => ({ id: uid(), name: n, beats: 4 })); return s; });
   const removeChord = (si: number, ci: number) => mutate((s) => { s[si].chords.splice(ci, 1); return s; });
+  const setLabel = (si: number, label: string) => mutate((s) => { s[si].label = label; return s; });
+  const addSection = (label = "Section") => mutate((s) => { s.push({ label, chords: [] }); return s; });
+  const removeSection = (si: number) => mutate((s) => { s.splice(si, 1); return s; });
+  const moveSection = (si: number, dir: -1 | 1) => mutate((s) => {
+    const j = si + dir; if (j < 0 || j >= s.length) return s;
+    [s[si], s[j]] = [s[j], s[si]]; return s;
+  });
+  // drag-and-drop reorder: pull section `from` out and drop it on `to`
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null); // section currently hovered as drop target
+  const dropOn = (to: number) => { setOverIdx(null); setDragIdx((from) => { if (from != null && from !== to) mutate((s) => { const [m] = s.splice(from, 1); s.splice(to, 0, m); return s; }); return null; }); };
 
   const selChord = selected ? sections[selected.s]?.chords[selected.c] : null;
   const selPcs = selChord ? chordPcsByName(selChord.name) : null;
@@ -94,7 +105,15 @@ export function Composer({
   });
 
   if (sections.length === 0) {
-    return <div className="banner">No sections yet. Run the <b>Structure</b> stage, then <b>Chords</b> — the progression opens here to edit, play, and (via the stage chat below) ask Claude to change.</div>;
+    return (
+      <div className="banner">
+        No sections yet. Run the <b>Structure</b> stage, then <b>Chords</b> — the progression opens here to edit, play, and (via the stage chat below) ask Claude to change.
+        <div className="row" style={{ gap: 6, marginTop: 8 }}>
+          <button className="sm" onClick={() => addSection()}>+ section</button>
+          <button className="sm" onClick={() => addSection("Instrumental")}>+ instrumental</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -131,12 +150,19 @@ export function Composer({
       </div>
 
       {sections.map((sec, si) => (
-        <div key={si} className="card" style={{ marginBottom: 8 }}>
+        <div key={si} className={"card section-card" + (dragIdx === si ? " dragging" : "") + (overIdx === si && dragIdx != null && dragIdx !== si ? (dragIdx < si ? " drop-below" : " drop-above") : "")} style={{ marginBottom: 8 }}
+          onDragOver={(e) => { if (dragIdx != null) { e.preventDefault(); if (overIdx !== si) setOverIdx(si); } }} onDrop={() => dropOn(si)}>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <b>{sec.label}</b>
+            <div className="row" style={{ gap: 6, alignItems: "center" }}>
+              <span className="drag-handle" draggable title="drag to reorder" onDragStart={() => setDragIdx(si)} onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}>⠿</span>
+              <input value={sec.label} onChange={(e) => setLabel(si, e.target.value)} title="section name (Intro, Solo, Drop…)" style={{ width: 180, fontWeight: 600 }} />
+            </div>
             <div className="row" style={{ gap: 6 }}>
+              <button className="sm ghost" title="move up" disabled={si === 0} onClick={() => moveSection(si, -1)}>↑</button>
+              <button className="sm ghost" title="move down" disabled={si === sections.length - 1} onClick={() => moveSection(si, 1)}>↓</button>
               <button className="sm" onClick={() => playSection(si)}>▶ play</button>
               <button className="sm" onClick={() => { addChord(si); setSelected({ s: si, c: sections[si].chords.length }); }}>+ chord</button>
+              <button className="sm ghost danger" title="remove section" onClick={() => removeSection(si)}>remove</button>
             </div>
           </div>
           {sec.feel && <div className="faint" style={{ marginBottom: 6 }}>{sec.feel}</div>}
@@ -156,10 +182,15 @@ export function Composer({
                 </div>
               );
             })}
-            {sec.chords.length === 0 && <span className="faint">no chords — use the palette or “+ chord”.</span>}
+            {sec.chords.length === 0 && <span className="faint">no chords — use the palette or “+ chord”. A section with chords but no lyrics plays as an instrumental.</span>}
           </div>
         </div>
       ))}
+
+      <div className="row" style={{ gap: 6, marginBottom: 10 }}>
+        <button className="sm" onClick={() => addSection()}>+ section</button>
+        <button className="sm" onClick={() => addSection("Instrumental")} title="add a wordless section (Intro / Solo / Break / Drop)">+ instrumental</button>
+      </div>
 
       {selChord && selPcs && selPcs.length > 0 && (
         <div className="card">

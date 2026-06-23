@@ -43,7 +43,13 @@ export function deriveSections(chordsData: any, lyricsData: any): { label: strin
       : [];
     const lines: string[] = Array.isArray(l?.lines) ? l.lines : typeof l?.text === "string" ? l.text.split("\n") : [];
 
-    // assign each chord to a lyric line proportionally, then place within the line
+    // ChordPro: if the lyrics already carry inline [chord] tags, they hold the
+    // exact, user-placed positions — render them as-is (no lossy spreading).
+    if (lines.some((x) => /\[[^\]]+\]/.test(x))) {
+      return { label, chords: names, lyrics: lines };
+    }
+
+    // legacy fallback: assign each chord to a lyric line proportionally, then place within the line
     const neCount = lines.filter((x) => x.trim()).length;
     const perLine: string[][] = Array.from({ length: Math.max(1, neCount) }, () => []);
     if (names.length && neCount) {
@@ -101,7 +107,7 @@ export function ArrangementBuilder({
           <div>
             <h3 style={{ marginBottom: 6 }}>Lyrics</h3>
             {lArt ? (
-              <LyricsEditor songId={songId} stageId={lyricsStage!.id} kind={lArt.kind} artifactId={lArt.id} content={lArt.content} onChanged={invalidate} />
+              <LyricsEditor songId={songId} stageId={lyricsStage!.id} kind={lArt.kind} artifactId={lArt.id} content={lArt.content} onChanged={invalidate} chordsData={cd} />
             ) : <div className="banner">Run the <b>Lyrics</b> stage in Workspace first.</div>}
           </div>
         </div>
