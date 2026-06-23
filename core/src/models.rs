@@ -110,11 +110,14 @@ pub struct Settings {
     /// JSON for an extra MCP server (e.g. Ableton) merged into the chat config —
     /// `{"command":"uvx","args":["ableton-mcp"]}` or `{"url":"http://..."}`. Empty = off.
     pub ableton_mcp: String,
+    /// Base folder where all song renders live. "+ Add version" opens this folder
+    /// so the user drops the generated audio here, keeping all music in one place.
+    pub music_folder: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { claude_model: String::new(), claude_bin: String::new(), mcp_token: String::new(), ableton_mcp: String::new() }
+        Settings { claude_model: String::new(), claude_bin: String::new(), mcp_token: String::new(), ableton_mcp: String::new(), music_folder: String::new() }
     }
 }
 

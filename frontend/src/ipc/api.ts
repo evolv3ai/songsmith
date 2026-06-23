@@ -35,13 +35,21 @@ export async function listen<T>(event: string, cb: (payload: T) => void): Promis
 }
 
 /** Native audio-file picker (Tauri only). Returns the chosen path or null. */
-export async function pickAudioFile(): Promise<string | null> {
+export async function pickAudioFile(defaultPath?: string): Promise<string | null> {
   if (!inTauri) return null;
   const { open } = await import("@tauri-apps/plugin-dialog");
   const res = await open({
     multiple: false,
+    defaultPath,
     filters: [{ name: "Audio", extensions: ["mp3", "wav", "aiff", "aif", "m4a", "flac", "ogg"] }],
   });
+  return typeof res === "string" ? res : null;
+}
+/** Native folder picker (Tauri only). Returns the chosen directory or null. */
+export async function pickFolder(): Promise<string | null> {
+  if (!inTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const res = await open({ directory: true, multiple: false });
   return typeof res === "string" ? res : null;
 }
 export async function openFile(path: string) {
@@ -53,6 +61,14 @@ export async function revealFile(path: string) {
   if (!inTauri) return;
   const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
   await revealItemInDir(path);
+}
+/** Native save dialog → write PNG bytes → return the saved path (Tauri only). */
+export async function savePng(defaultName: string, bytes: number[]): Promise<string | null> {
+  if (!inTauri) return null;
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const path = await save({ defaultPath: defaultName, filters: [{ name: "PNG", extensions: ["png"] }] });
+  if (!path) return null;
+  return call<string>("write_png", { path, bytes });
 }
 
 export type ToolInfo = { name: string; description: string; destructive: boolean };
@@ -73,6 +89,10 @@ export const api = {
   listSongs: () => call<Song[]>("list_songs"),
   getSong: (id: string) => call<SongDetail | null>("get_song", { id }),
   updateSongStatus: (id: string, status: string) => call<Song>("update_song_status", { id, status }),
+  updateSongTitle: (id: string, title: string) => call<Song>("update_song_title", { id, title }),
+  updateSongKey: (id: string, root: string, mode: string, bpm: number) => call<Song>("update_song_key", { id, root, mode, bpm }),
+  refineField: (stageLabel: string, fieldLabel: string, current: string, instruction: string) =>
+    call<string>("refine_field", { stageLabel, fieldLabel, current, instruction }),
   deleteSong: (id: string) => call<void>("delete_song", { id }),
   getStage: (id: string) => call<StageDetail | null>("get_stage", { id }),
   runStage: (stageId: string, userInput?: string) =>
@@ -112,9 +132,13 @@ export const api = {
   listTools: () => call<ToolInfo[]>("list_tools"),
   mcpConfig: () => call<McpConfig>("mcp_config"),
   claudeStatus: () => call<ClaudeStatus>("claude_status"),
+  testAbleton: () => call<string>("test_ableton"),
+  resetAbleton: () => call<string>("reset_ableton"),
+  abletonBuild: (songId: string) => call<string>("ableton_build", { songId }),
+  abletonBuildClips: (songId: string) => call<string>("ableton_build_clips", { songId }),
   detectAbletonMcp: () => call<{ found: boolean; name?: string; entry?: any }>("detect_ableton_mcp"),
-  chatSend: (message: string, sessionId?: string) =>
-    call<string>("chat_send", { message, sessionId: sessionId ?? null }),
+  chatSend: (message: string, sessionId?: string, songId?: string) =>
+    call<string>("chat_send", { message, sessionId: sessionId ?? null, songId: songId ?? null }),
 };
 
 export const STAGE_ORDER = ["concept", "structure", "chords", "lyrics", "prompt"] as const;

@@ -62,8 +62,13 @@ export function Composer({
     if (!dirty) setSections(fromData(initialData));
   }, [artifactId]);
 
-  const rootPc = pitchClassOf(keyRoot) ?? 0;
-  const palette = useMemo(() => diatonicChords(rootPc, keyMode === "major" ? "major" : "minor"), [rootPc, keyMode]);
+  // palette scale — defaults to the song's key, selectable to explore other scales
+  const songRoot = NOTE_NAMES[pitchClassOf(keyRoot) ?? 0];
+  const songMode: "major" | "minor" = keyMode === "major" ? "major" : "minor";
+  const [scaleRoot, setScaleRoot] = useState(songRoot);
+  const [scaleMode, setScaleMode] = useState<"major" | "minor">(songMode);
+  const palette = useMemo(() => diatonicChords(pitchClassOf(scaleRoot) ?? 0, scaleMode), [scaleRoot, scaleMode]);
+  const offKey = scaleRoot !== songRoot || scaleMode !== songMode;
 
   const mutate = (fn: (s: Section[]) => Section[]) => { setSections((cur) => fn(structuredClone(cur))); setDirty(true); };
   const setChordName = (si: number, ci: number, name: string) => mutate((s) => { s[si].chords[ci].name = name; return s; });
@@ -102,7 +107,20 @@ export function Composer({
       <ImportProgression sectionLabels={sections.map((s) => s.label)} onImport={importToSection} />
 
       <div className="card" style={{ marginBottom: 10 }}>
-        <label>Palette — {keyRoot} {keyMode} (adds to selected section)</label>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <label style={{ margin: 0 }}>Palette — chords in scale <span className="faint">(click to add to selected section)</span></label>
+          <div className="row" style={{ gap: 4, alignItems: "center" }}>
+            <select value={scaleRoot} onChange={(e) => setScaleRoot(e.target.value)} title="scale root">
+              {NOTE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <select value={scaleMode} onChange={(e) => setScaleMode(e.target.value as "major" | "minor")} title="scale type">
+              <option value="major">major</option>
+              <option value="minor">minor</option>
+            </select>
+            {offKey && <button className="sm ghost" title="back to the song's key" onClick={() => { setScaleRoot(songRoot); setScaleMode(songMode); }}>↺ song key</button>}
+          </div>
+        </div>
+        {offKey && <div className="faint" style={{ fontSize: 11, marginBottom: 4 }}>exploring {scaleRoot} {scaleMode} — the song's key is {songRoot} {songMode} (set in Structure)</div>}
         <div className="row" style={{ flexWrap: "wrap", gap: 5 }}>
           {palette.map((p) => (
             <button key={p.roman} className="sm" title={p.roman} onClick={() => { playOne(p.name); if (selected) addChord(selected.s, p.name); }}>

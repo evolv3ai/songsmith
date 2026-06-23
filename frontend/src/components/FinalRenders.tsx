@@ -6,11 +6,16 @@ const baseName = (p: string) => p.split("/").pop() ?? p;
 export function FinalRenders({ songId }: { songId: string }) {
   const qc = useQueryClient();
   const renders = useQuery({ queryKey: ["renders", songId], queryFn: () => api.listRenders(songId) });
+  const settings = useQuery({ queryKey: ["settings"], queryFn: api.getSettings });
+  const musicFolder = settings.data?.music_folder?.trim() || "";
   const invalidate = () => qc.invalidateQueries({ queryKey: ["renders", songId] });
 
   const add = useMutation({
     mutationFn: async () => {
-      const path = await pickAudioFile();
+      // open the music folder so the user can drop the song in (all music in one place),
+      // then pick the file — the picker defaults to that folder
+      if (musicFolder) await openFile(musicFolder);
+      const path = await pickAudioFile(musicFolder || undefined);
       if (!path) return null;
       return api.addRender(songId, baseName(path), path, "", "");
     },
@@ -24,7 +29,11 @@ export function FinalRenders({ songId }: { songId: string }) {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
           <h2 style={{ margin: 0 }}>🎧 Final renders</h2>
-          <span className="muted">Drop in the generated audio versions (Suno / Udio / Ableton). Files stay on disk; Songsmith just references them.</span>
+          <span className="muted">
+            {musicFolder
+              ? <>+ Add opens <code>{baseName(musicFolder)}</code> — drop your song there, then pick it. All music lives in one place.</>
+              : <>Set a music folder in <b>Settings</b> so all songs save to one place. For now, + Add just picks a file.</>}
+          </span>
         </div>
         <button className="primary" onClick={() => add.mutate()} disabled={!inTauri || add.isPending}>
           {add.isPending ? "…" : "+ Add version"}

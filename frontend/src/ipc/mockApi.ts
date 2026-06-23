@@ -35,17 +35,78 @@ function seed(): Any {
     instructions: `(${name}) — built-in skill. Edit me in the Skills page.`,
     source: "builtin", enabled: true, created_at: ts, updated_at: ts,
   }));
+  const presetId = uid();
+  // a demo song so the Sheet / play-along view has real data to render
+  const songId = uid();
+  const song = {
+    id: songId, style_preset_id: presetId, title: "Cyber Dreams", status: "in_progress",
+    current_stage: "prompt", key_root: "A", key_mode: "minor", bpm: 120, created_at: ts, updated_at: ts,
+  };
+  const order = ["concept", "structure", "chords", "lyrics", "prompt"];
+  const stages = order.map((type, ordinal) => ({
+    id: uid(), song_id: songId, type, ordinal,
+    status: ordinal <= 4 ? "done" : "pending", skill_id: null, created_at: ts, updated_at: ts,
+  }));
+  const stageOf = (t: string) => stages.find((s) => s.type === t)!;
+  const artifact = (stageType: string, kind: string, data: Any) => ({
+    id: uid(), song_id: songId, stage_id: stageOf(stageType).id, kind,
+    content: JSON.stringify({ kind, text: "", data }), version: 1, approved: true, created_at: ts,
+  });
+  const chordsData = {
+    sections: [
+      { label: "Intro", chords: ["Am", "Am", "F", "F"] },
+      { label: "Verse 1", chords: ["Dm", "Bb", "F", "Am", "Dm", "Bb", "F", "Am"] },
+      { label: "Pre-Chorus / Build 1", chords: ["Dm", "Em", "F", "G"] },
+      { label: "Chorus 1", chords: ["C", "G", "Am", "F", "C", "G", "Am", "F"] },
+    ],
+  };
+  const taggedLyrics = [
+    "[Intro]",
+    "",
+    "[Verse 1]",
+    "[Dm]The dashboard [Bb]glows a color that the [F]daylight never [Am]had",
+    "[Dm]Black glass and a [Bb]low hum, and the [F]city breathing [Am]back",
+    "[Dm]I don't ask where [Bb]I'm going — I just [F]follow how it [Am]shines",
+    "",
+    "[Pre-Chorus / Build 1]",
+    "[Dm]Hold the wheel a [Em]little tighter, [F]neon in my [G]eyes",
+    "",
+    "[Chorus 1]",
+    "[C]I dream in [G]synthwave, I [Am]dream in neon and [F]rain",
+    "[C]Let the highway [G]hold me, let the [Am]cold light learn my [F]name",
+    "",
+    "[Bridge]", // no matching chords-artifact section — shapes come from the tags
+    "[Dm]And the static [Em]starts to feel like a [F]hand",
+    "[G]take me under, one more time",
+  ].join("\n");
+  // lyrics artifact derived from the tagged lyrics (chords stripped), so the
+  // Builder/Sheet (which derive chord-over-lyric from chords + lyrics) have data
+  const lyricsSections = (() => {
+    const out: Any[] = []; let cur: Any | null = null;
+    for (const line of taggedLyrics.split("\n")) {
+      const t = line.trim(); const hm = t.match(/^\[([^\]]+)\]$/);
+      if (hm) { cur = { label: hm[1], lines: [] }; out.push(cur); }
+      else if (cur && t) cur.lines.push(line.replace(/\[[^\]]+\]/g, ""));
+    }
+    return out;
+  })();
   return {
     presets: [
       {
-        id: uid(), name: "Night Drive", genre: "synthwave", mood: "moody, propulsive",
+        id: presetId, name: "Night Drive", genre: "synthwave", mood: "moody, propulsive",
         influences: "80s film scores, neon-noir", key_tempo_feel: "A minor, ~120 BPM",
         vocal_range: "mid baritone", themes: "motion, loneliness, the open road",
         created_at: ts, updated_at: ts,
       },
     ],
-    songs: [], stages: [], artifacts: [], skills, progressions: [], renders: [],
-    settings: { claude_model: "", claude_bin: "", mcp_token: "mock-token", ableton_mcp: "" },
+    songs: [song], stages,
+    artifacts: [
+      artifact("chords", "chords", chordsData),
+      artifact("lyrics", "lyrics", { sections: lyricsSections }),
+      artifact("prompt", "generation_prompt", { taggedLyrics }),
+    ],
+    skills, progressions: [], renders: [],
+    settings: { claude_model: "", claude_bin: "", mcp_token: "mock-token", ableton_mcp: "", music_folder: "" },
   };
 }
 
@@ -95,6 +156,9 @@ export async function mockCall<T>(cmd: string, a: Any): Promise<T> {
       return r({ song, preset, stages });
     }
     case "update_song_status": { const v = db.songs.find((x: Any) => x.id === a.id); v.status = a.status; v.updated_at = now(); return r(v); }
+    case "update_song_title": { const v = db.songs.find((x: Any) => x.id === a.id); v.title = a.title; v.updated_at = now(); return r(v); }
+    case "update_song_key": { const v = db.songs.find((x: Any) => x.id === a.id); v.key_root = a.root; v.key_mode = a.mode; v.bpm = a.bpm; v.updated_at = now(); return r(v); }
+    case "refine_field": return r(`(mock) ${a.fieldLabel}: ${a.instruction}`);
     case "delete_song": {
       db.songs = db.songs.filter((v: Any) => v.id !== a.id);
       const sids = db.stages.filter((s: Any) => s.song_id === a.id).map((s: Any) => s.id);
@@ -162,6 +226,10 @@ export async function mockCall<T>(cmd: string, a: Any): Promise<T> {
     case "mcp_config": return r({ db_path: "(browser mock)", token: "mock-token", command_hint: "Run the Tauri app for a real MCP config." });
     case "claude_status": return r({ found: false, version: null, model: db.settings.claude_model, bin: "" });
     case "detect_ableton_mcp": return r({ found: false });
+    case "test_ableton": return r("(mock) Ableton test runs only in the desktop app.");
+    case "reset_ableton": return r("(mock) reset runs only in the desktop app.");
+    case "ableton_build": return r("(mock) Ableton build runs only in the desktop app.");
+    case "ableton_build_clips": return r("(mock) Ableton clip build runs only in the desktop app.");
     case "chat_send": return r("mock-session");
     default: throw new Error(`mock: unknown command '${cmd}'`);
   }
@@ -169,7 +237,7 @@ export async function mockCall<T>(cmd: string, a: Any): Promise<T> {
 
 const MOCK_TOOLS = [
   "list_style_presets","get_style_preset","create_style_preset","update_style_preset","generate_style_preset",
-  "create_song","list_songs","get_song","update_song_status","delete_song",
+  "create_song","list_songs","get_song","update_song_status","update_song_title","delete_song",
   "get_stage","run_stage","approve_stage","advance_stage",
   "get_artifact","save_artifact","list_artifact_revisions","revert_artifact",
   "list_skills","get_skill","create_skill","update_skill","set_skill_enabled",

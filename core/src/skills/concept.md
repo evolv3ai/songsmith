@@ -9,8 +9,9 @@ The producer may give a seed (a title, a line, a feeling) or nothing. If nothing
 PRODUCE
 - A working TITLE plus 2 alternates (short, evocative, singable).
 - The HOOK / central angle in one sentence (the thing the song is really about).
-- The THEME and the emotional arc (where it starts, where it lands).
-- The MOOD in 3-5 adjectives, congruent with the style preset.
+- The THEME (what the song means) and, separately, the EMOTIONAL ARC (where it starts, where it lands).
+- The MOOD as 3-5 adjectives, congruent with the style preset.
 
-Never invent real artists' lyrics. Keep it tight. End with the artifact as a single fenced ```json block:
-{ "title": "...", "alternates": ["...","..."], "hook": "...", "theme": "...", "mood": "..." }
+Never invent real artists' lyrics. Keep it tight. End with the artifact as a single fenced ```json block
+(each piece is its own field so the app can edit it individually — `alternates` and `mood` are arrays):
+{ "title": "...", "alternates": ["...","..."], "hook": "...", "theme": "...", "emotionalArc": "...", "mood": ["...","...","..."] }

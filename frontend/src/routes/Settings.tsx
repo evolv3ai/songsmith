@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api } from "../ipc/api";
+import { api, pickFolder } from "../ipc/api";
 import type { Settings } from "../ipc/generated";
 
 export function SettingsPage() {
@@ -11,6 +11,15 @@ export function SettingsPage() {
   const [form, setForm] = useState<Settings | null>(null);
   const [saved, setSaved] = useState("");
   const [detectMsg, setDetectMsg] = useState("");
+  const [abletonMsg, setAbletonMsg] = useState("");
+
+  // pin a uv-managed Python so cryptography uses a prebuilt arm64 wheel (the
+  // default x86_64 framework Python forces a source build that fails on Apple Silicon)
+  const fillAbleton = () => setForm((f) => (f ? { ...f, ableton_mcp: JSON.stringify({ command: "uvx", args: ["--python", "3.12", "ableton-mcp"] }, null, 2) } : f));
+  const testAbleton = async () => { setAbletonMsg("Testing 127.0.0.1:9877…"); setAbletonMsg(await api.testAbleton()); };
+  const resetAbleton = async () => { setAbletonMsg("Freeing connection…"); setAbletonMsg(await api.resetAbleton()); };
+
+  const chooseMusicFolder = async () => { const f = await pickFolder(); if (f) { setForm((c) => (c ? { ...c, music_folder: f } : c)); setSaved(""); } };
 
   const detectAbleton = async () => {
     const r = await api.detectAbletonMcp();
@@ -80,14 +89,33 @@ export function SettingsPage() {
               <span className="k">Status</span>
               {form.ableton_mcp.trim() ? <span className="badge done">connected</span> : <span className="badge pending">not connected</span>}
             </div>
-            <div className="row" style={{ gap: 8, marginBottom: 6 }}>
+            <div className="row" style={{ gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+              <button onClick={fillAbleton}>Use uvx ableton-mcp</button>
               <button onClick={detectAbleton}>Detect from Claude Desktop</button>
               {form.ableton_mcp.trim() && <button className="ghost" onClick={() => setForm({ ...form, ableton_mcp: "" })}>disconnect</button>}
             </div>
+            <div className="row" style={{ gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+              <button onClick={testAbleton} title="probe Ableton's Remote Script on port 9877 directly">Test connection</button>
+              <button className="ghost" onClick={resetAbleton} title="stop stray ableton-mcp processes holding the socket">Free connection (reset)</button>
+            </div>
+            {abletonMsg && <pre className="artifact-text" style={{ whiteSpace: "pre-wrap", maxHeight: 180, marginBottom: 6 }}>{abletonMsg}</pre>}
             {detectMsg && <div className="faint" style={{ marginBottom: 6 }}>{detectMsg}</div>}
             <label>Server config (JSON)</label>
             <textarea value={form.ableton_mcp} onChange={set("ableton_mcp")} style={{ minHeight: 80, fontSize: 12 }}
               placeholder={'{ "command": "uvx", "args": ["ableton-mcp"] }'} />
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="primary" onClick={() => save.mutate()}>Save</button>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Music folder</h2>
+            <p className="muted">Where all your song renders live. The Final renders <b>+ Add version</b> button opens this folder so you drop the song here — all music in one place.</p>
+            <div className="row" style={{ gap: 8, marginBottom: 6 }}>
+              <button onClick={chooseMusicFolder}>Choose folder…</button>
+              {form.music_folder.trim() && <button className="ghost" onClick={() => setForm({ ...form, music_folder: "" })}>clear</button>}
+            </div>
+            <div className="artifact-text" style={{ maxHeight: "none" }}>{form.music_folder || "— no folder set —"}</div>
             <div className="row" style={{ marginTop: 8 }}>
               <button className="primary" onClick={() => save.mutate()}>Save</button>
             </div>

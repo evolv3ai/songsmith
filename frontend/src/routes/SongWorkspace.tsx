@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, STAGE_LABELS } from "../ipc/api";
@@ -8,9 +9,13 @@ import { ArtifactPanel } from "../components/ArtifactPanel";
 import { AIRunPanel } from "../components/AIRunPanel";
 import { Composer } from "../components/Composer";
 import { LyricsEditor } from "../components/LyricsEditor";
-import { StageChat } from "../components/StageChat";
+import { ConceptEditor } from "../components/ConceptEditor";
+import { StructureEditor } from "../components/StructureEditor";
+import { PromptEditor } from "../components/PromptEditor";
+import { FieldDrawer, useFieldDrawer } from "../components/FieldDrawer";
 import { FinalRenders } from "../components/FinalRenders";
 import { SongSheet } from "../components/SongSheet";
+import { ArrangementBuilder } from "../components/ArrangementBuilder";
 
 function artifactData(content: string): any {
   try {
@@ -27,7 +32,20 @@ export function SongWorkspace() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [tab, setTab] = useState<"workspace" | "sheet">("workspace");
+  const [tab, setTab] = useState<"workspace" | "builder" | "sheet" | "renders">("workspace");
+  const [abMsg, setAbMsg] = useState("");
+  const [showStyle, setShowStyle] = useState(false);
+  const fd = useFieldDrawer();
+  // the right inspector flyout is open when a field is focused or Style is toggled
+  const inspectorOpen = !!fd?.active || showStyle;
+  // a focused field takes precedence over the style panel
+  useEffect(() => { if (fd?.active) setShowStyle(false); }, [fd?.active]);
+  // portal target for the sidebar's per-song nav (rendered by the app shell)
+  const [navSlot, setNavSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setNavSlot(document.getElementById("song-nav-slot")); }, []);
+  // navigating to a different song clears the stage selection (avoids stale highlight)
+  useEffect(() => { setSelectedId(null); fd?.close?.(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const buildAbleton = async () => { setAbMsg("Building locators in Ableton…"); try { setAbMsg(await api.abletonBuild(id)); } catch (e: any) { setAbMsg(String(e?.message ?? e)); } };
 
   const song = useQuery({ queryKey: ["song", id], queryFn: () => api.getSong(id) });
   const currentType = song.data?.song.current_stage ?? "concept";
@@ -49,6 +67,8 @@ export function SongWorkspace() {
     qc.invalidateQueries({ queryKey: ["songs"] });
   };
   const setStatus = useMutation({ mutationFn: (s: string) => api.updateSongStatus(id, s), onSuccess: invalidate });
+  const setTitle = useMutation({ mutationFn: (t: string) => api.updateSongTitle(id, t), onSuccess: invalidate });
+  const [editTitle, setEditTitle] = useState<string | null>(null);
   const del = useMutation({
     mutationFn: () => api.deleteSong(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["songs"] }); nav({ to: "/" }); },
@@ -59,18 +79,34 @@ export function SongWorkspace() {
   const v = song.data.song;
   const preset = song.data.preset;
   const sd = stage.data;
+  const structureDone = song.data.stages.find((s) => s.type === "structure")?.status === "done";
 
   return (
     <div>
       <div className="topbar">
         <div>
-          <h1>{v.title || "Untitled song"}</h1>
+          {editTitle === null ? (
+            <h1 onDoubleClick={() => setEditTitle(v.title)} title="double-click to rename" style={{ cursor: "text" }}>{v.title || "Untitled song"}</h1>
+          ) : (
+            <input
+              autoFocus
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={() => { if (editTitle.trim() && editTitle !== v.title) setTitle.mutate(editTitle.trim()); setEditTitle(null); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { if (editTitle.trim() && editTitle !== v.title) setTitle.mutate(editTitle.trim()); setEditTitle(null); }
+                if (e.key === "Escape") setEditTitle(null);
+              }}
+              style={{ fontSize: 22, fontWeight: 700, width: "min(480px, 60vw)" }}
+            />
+          )}
           <div className="row" style={{ gap: 8 }}>
             <span className={"badge " + v.status}>{v.status.replace("_", " ")}</span>
             <span className="faint">{preset.name} · {v.key_root} {v.key_mode} · {String(v.bpm)} BPM</span>
           </div>
         </div>
         <div className="row" style={{ gap: 6 }}>
+          <button onClick={buildAbleton} disabled={!structureDone} title={structureDone ? "create a named Arrangement locator per section in Ableton (direct, no chat)" : "Complete the Structure stage first — it provides the section map and bar counts"}>⚡ Build in Ableton</button>
           {v.status !== "done" ? (
             <button className="primary" onClick={() => setStatus.mutate("done")}>Mark done</button>
           ) : (
@@ -79,17 +115,39 @@ export function SongWorkspace() {
           <button className="danger" onClick={() => setConfirmDelete(true)}>Delete</button>
         </div>
       </div>
+      {abMsg && (
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <button className="sm ghost" title="clear" onClick={() => setAbMsg("")} style={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}>✕</button>
+          <pre className="artifact-text" style={{ whiteSpace: "pre-wrap", maxHeight: 200, margin: 0, paddingRight: 32 }}>{abMsg}</pre>
+        </div>
+      )}
 
       <div className="row" style={{ gap: 6, marginBottom: 12 }}>
         <button className={"sm" + (tab === "workspace" ? " primary" : "")} onClick={() => setTab("workspace")}>Workspace</button>
-        <button className={"sm" + (tab === "sheet" ? " primary" : "")} onClick={() => setTab("sheet")}>Sheet / play-along</button>
+        <button className={"sm" + (tab === "builder" ? " primary" : "")} onClick={() => setTab("builder")}>Builder / manage</button>
+        <button className={"sm" + (tab === "sheet" ? " primary" : "")} onClick={() => setTab("sheet")}>Sheet preview</button>
+        <button className={"sm" + (tab === "renders" ? " primary" : "")} onClick={() => setTab("renders")}>🎧 Renders</button>
+        <div style={{ flex: 1 }} />
+        {tab === "workspace" && (
+          <button className={"sm" + (showStyle && !fd?.active ? " primary" : "")} title="show the style context the AI uses"
+            onClick={() => { fd?.close?.(); setShowStyle((s) => !s); }}>🎨 Style context</button>
+        )}
       </div>
+
+      {/* per-song nav lives in the sidebar's empty space (portaled out of the workspace) */}
+      {navSlot && createPortal(
+        <>
+          <StageChecklist bare stages={song.data.stages} currentType={currentType} selectedId={activeStageId} onSelect={(s: Stage) => { setSelectedId(s.id); setTab("workspace"); }} />
+          <button className={"rail-btn" + (tab === "renders" ? " active" : "")} onClick={() => setTab("renders")}>
+            <span>🎧 Final renders</span><span className="faint">›</span>
+          </button>
+        </>,
+        navSlot,
+      )}
 
       {tab === "workspace" && (
       <>
-      <div className="workspace">
-        <StageChecklist stages={song.data.stages} currentType={currentType} selectedId={activeStageId} onSelect={(s: Stage) => setSelectedId(s.id)} />
-
+      <div className="workspace solo">
         <div className="pane">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <h2>{sd ? STAGE_LABELS[sd.stage.type] : "Stage"}</h2>
@@ -101,7 +159,25 @@ export function SongWorkspace() {
               No artifact yet. Run this stage to co-write the <b>{STAGE_LABELS[sd.stage.type]}</b> using the style preset and prior approved stages as context.
             </div>
           )}
-          {sd?.artifact && sd.stage.type === "chords" ? (
+          {sd?.artifact && sd.stage.type === "concept" ? (
+            <ConceptEditor
+              key={sd.artifact.id}
+              songId={id}
+              stageId={sd.stage.id}
+              kind={sd.artifact.kind}
+              content={sd.artifact.content}
+              onChanged={invalidate}
+            />
+          ) : sd?.artifact && sd.stage.type === "structure" ? (
+            <StructureEditor
+              key={sd.artifact.id}
+              songId={id}
+              stageId={sd.stage.id}
+              kind={sd.artifact.kind}
+              content={sd.artifact.content}
+              onChanged={invalidate}
+            />
+          ) : sd?.artifact && sd.stage.type === "chords" ? (
             <Composer
               songId={id}
               stageId={sd.stage.id}
@@ -121,43 +197,54 @@ export function SongWorkspace() {
               content={sd.artifact.content}
               onChanged={invalidate}
             />
+          ) : sd?.artifact && sd.stage.type === "prompt" ? (
+            <PromptEditor
+              key={sd.artifact.id}
+              songId={id}
+              stageId={sd.stage.id}
+              kind={sd.artifact.kind}
+              content={sd.artifact.content}
+              onChanged={invalidate}
+            />
           ) : (
             sd?.artifact && <ArtifactPanel artifact={sd.artifact} songId={id} stageId={sd.stage.id} onChanged={invalidate} />
           )}
           {sd && (
             <AIRunPanel stageId={sd.stage.id} stageType={sd.stage.type} hasArtifact={!!sd.artifact} approved={!!sd.artifact?.approved} onChanged={invalidate} />
           )}
-          {sd && (
-            <StageChat
-              songId={id}
-              stageId={sd.stage.id}
-              stageType={sd.stage.type}
-              kind={sd.artifact?.kind ?? (sd.stage.type === "prompt" ? "generation_prompt" : sd.stage.type)}
-              content={sd.artifact?.content ?? null}
-              keyRoot={v.key_root}
-              keyMode={v.key_mode}
-              onChanged={invalidate}
-            />
-          )}
         </div>
 
-        <div className="pane">
-          <h3>Style context</h3>
-          <div className="col" style={{ gap: 10 }}>
-            {[["Genre", preset.genre], ["Mood", preset.mood], ["Influences", preset.influences], ["Key / tempo", preset.key_tempo_feel], ["Vocal range", preset.vocal_range], ["Themes", preset.themes]].map(([k, val]) => (
-              <div key={k}><label>{k}</label><div className="faint">{val || "—"}</div></div>
-            ))}
-          </div>
-          <hr />
-          <p className="faint">Approved outputs from earlier stages carry forward as context to the stage you run.</p>
-        </div>
       </div>
 
-      <FinalRenders songId={id} />
+      <aside className={"inspector-flyout" + (inspectorOpen ? " open" : "")}>
+        {fd?.active ? (
+          <FieldDrawer context={[
+            `Key / tempo: ${v.key_root} ${v.key_mode} · ${String(v.bpm)} BPM`,
+            `Genre: ${preset.genre}`,
+            `Mood: ${preset.mood}`,
+            preset.themes ? `Themes: ${preset.themes}` : "",
+          ].filter(Boolean)} />
+        ) : showStyle ? (
+          <>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>Style context</h3>
+              <button className="sm ghost" title="close" onClick={() => setShowStyle(false)}>✕</button>
+            </div>
+            <div className="col" style={{ gap: 10 }}>
+              {[["Genre", preset.genre], ["Mood", preset.mood], ["Influences", preset.influences], ["Key / tempo", preset.key_tempo_feel], ["Vocal range", preset.vocal_range], ["Themes", preset.themes]].map(([k, val]) => (
+                <div key={k}><label>{k}</label><div className="faint">{val || "—"}</div></div>
+              ))}
+            </div>
+            <hr />
+            <p className="faint">Approved outputs from earlier stages carry forward as context to the stage you run. Click a field's 💬 to refine it inline.</p>
+          </>
+        ) : null}
+      </aside>
       </>
       )}
-      {tab === "sheet" && (
-        <SongSheet
+      {tab === "builder" && (
+        <ArrangementBuilder
+          songId={id}
           title={v.title || "Untitled song"}
           subtitle={`${preset.name} · ${v.key_root} ${v.key_mode} · ${String(v.bpm)} BPM`}
           keyRoot={v.key_root}
@@ -165,6 +252,17 @@ export function SongWorkspace() {
           stages={song.data.stages}
         />
       )}
+      {tab === "sheet" && (
+        <SongSheet
+          songId={id}
+          title={v.title || "Untitled song"}
+          subtitle={`${preset.name} · ${v.key_root} ${v.key_mode} · ${String(v.bpm)} BPM`}
+          keyRoot={v.key_root}
+          keyMode={v.key_mode}
+          stages={song.data.stages}
+        />
+      )}
+      {tab === "renders" && <FinalRenders songId={id} />}
 
       {confirmDelete && (
         <div className="modal-bg" onClick={() => setConfirmDelete(false)}>

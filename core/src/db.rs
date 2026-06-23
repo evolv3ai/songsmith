@@ -93,22 +93,23 @@ fn strip_frontmatter(raw: &str) -> String {
 
 pub async fn seed_skills(conn: &Connection) -> Result<()> {
     for (key, name, stage_type, body) in SEED_SKILLS {
-        let exists = conn
-            .query("SELECT 1 FROM skill WHERE key = ?1", params![*key])
-            .await?
-            .next()
-            .await?
-            .is_some();
-        if exists {
-            continue;
-        }
         let ts = now();
-        conn.execute(
-            "INSERT INTO skill (id, key, name, stage_type, instructions, source, enabled, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'builtin', 1, ?6, ?6)",
-            params![new_id(), *key, *name, *stage_type, strip_frontmatter(body), ts],
-        )
-        .await?;
+        let mut rows = conn.query("SELECT source FROM skill WHERE key = ?1", params![*key]).await?;
+        if let Some(r) = rows.next().await? {
+            // refresh untouched builtins to the latest embedded version; leave user-edited ones
+            if s(&r, 0) == "builtin" {
+                conn.execute(
+                    "UPDATE skill SET name=?2, stage_type=?3, instructions=?4, updated_at=?5 WHERE key=?1 AND source='builtin'",
+                    params![*key, *name, *stage_type, strip_frontmatter(body), ts],
+                ).await?;
+            }
+        } else {
+            conn.execute(
+                "INSERT INTO skill (id, key, name, stage_type, instructions, source, enabled, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'builtin', 1, ?6, ?6)",
+                params![new_id(), *key, *name, *stage_type, strip_frontmatter(body), ts],
+            ).await?;
+        }
     }
     Ok(())
 }
@@ -216,6 +217,14 @@ pub async fn get_song_detail(conn: &Connection, id: &str) -> Result<Option<SongD
 }
 pub async fn update_song_status(conn: &Connection, id: &str, status: &str) -> Result<Song> {
     conn.execute("UPDATE song SET status=?2, updated_at=?3 WHERE id=?1", params![id, status, now()]).await?;
+    Ok(get_song(conn, id).await?.unwrap())
+}
+pub async fn update_song_title(conn: &Connection, id: &str, title: &str) -> Result<Song> {
+    conn.execute("UPDATE song SET title=?2, updated_at=?3 WHERE id=?1", params![id, title, now()]).await?;
+    Ok(get_song(conn, id).await?.unwrap())
+}
+pub async fn update_song_key(conn: &Connection, id: &str, root: &str, mode: &str, bpm: i64) -> Result<Song> {
+    conn.execute("UPDATE song SET key_root=?2, key_mode=?3, bpm=?4, updated_at=?5 WHERE id=?1", params![id, root, mode, bpm, now()]).await?;
     Ok(get_song(conn, id).await?.unwrap())
 }
 pub async fn set_song_current_stage(conn: &Connection, id: &str, stage_type: &str) -> Result<()> {
@@ -384,8 +393,9 @@ pub async fn create_skill(conn: &Connection, input: SkillInput) -> Result<Skill>
     Ok(get_skill(conn, &id).await?.unwrap())
 }
 pub async fn update_skill(conn: &Connection, id: &str, input: SkillInput) -> Result<Skill> {
+    // mark as user-owned so the builtin refresh on startup won't overwrite the edit
     conn.execute(
-        "UPDATE skill SET key=?2, name=?3, stage_type=?4, instructions=?5, updated_at=?6 WHERE id=?1",
+        "UPDATE skill SET key=?2, name=?3, stage_type=?4, instructions=?5, source='user', updated_at=?6 WHERE id=?1",
         params![id, input.key, input.name, input.stage_type, input.instructions, now()],
     ).await?;
     Ok(get_skill(conn, id).await?.unwrap())
@@ -435,6 +445,7 @@ pub async fn get_settings(conn: &Connection) -> Result<Settings> {
             "claude_bin" => st.claude_bin = s(&r, 1),
             "mcp_token" => st.mcp_token = s(&r, 1),
             "ableton_mcp" => st.ableton_mcp = s(&r, 1),
+            "music_folder" => st.music_folder = s(&r, 1),
             _ => {}
         }
     }

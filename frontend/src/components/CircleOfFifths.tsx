@@ -4,8 +4,8 @@ import { chordMidisByName } from "../music/engineAdapter";
 
 // clockwise from top: C G D A E B F# Db Ab Eb Bb F
 const MAJ_PC = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
-const MAJ_LBL = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"];
-const MIN_LBL = ["Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "Bbm", "Fm", "Cm", "Gm", "Dm"];
+const MAJ_LBL = ["C", "G", "D", "A", "E", "B", "F#", "C#", "G#", "D#", "A#", "F"];
+const MIN_LBL = ["Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m", "Fm", "Cm", "Gm", "Dm"];
 const minPc = (majPc: number) => (majPc + 9) % 12; // relative minor root
 
 export function CircleOfFifths({

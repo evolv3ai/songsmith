@@ -6,15 +6,18 @@ export function StageChecklist({
   currentType,
   selectedId,
   onSelect,
+  bare,
 }: {
   stages: Stage[];
   currentType: string;
   selectedId: string | null;
   onSelect: (s: Stage) => void;
+  /** rail mode: drop the card chrome, render compact for the sidebar */
+  bare?: boolean;
 }) {
   return (
-    <div className="pane checklist">
-      <h3>Song spec</h3>
+    <div className={bare ? "checklist rail" : "pane checklist"}>
+      {bare ? <div className="rail-head">SONG SPEC</div> : <h3>Song spec</h3>}
       {stages.map((s) => {
         const active = selectedId ? s.id === selectedId : s.type === currentType;
         return (

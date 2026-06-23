@@ -1,42 +1,77 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../ipc/api";
+import { api, inTauri, savePng, revealFile } from "../ipc/api";
 import type { Stage } from "../ipc/generated";
 import { pitchClassOf } from "../music/theory";
-import { playAlongSvg, downloadPng } from "../music/diagrams";
+import { playAlongSvg, downloadPng, pngBytes, diagramSvgShape, pianoVoicedSvg } from "../music/diagrams";
+import { guitarCountByName, guitarFretsByName, chordSizeByName, voicedMidisByName } from "../music/engineAdapter";
+import { deriveSections } from "./ArrangementBuilder";
+
+const INV_LABELS = ["root", "1st inv", "2nd inv", "3rd inv", "4th inv"];
 
 function dataOf(content: string | undefined): any {
   if (!content) return null;
   try { return JSON.parse(content)?.data ?? null; } catch { return null; }
 }
 
+const vkey = (songId: string) => `ss-voicings-${songId}`;
+function loadVoicings(songId: string): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(vkey(songId)) || "{}"); } catch { return {}; }
+}
+
 export function SongSheet({
-  title, subtitle, keyRoot, keyMode, stages,
+  songId, title, subtitle, keyRoot, keyMode, stages,
 }: {
-  title: string; subtitle: string; keyRoot: string; keyMode: string; stages: Stage[];
+  songId: string; title: string; subtitle: string; keyRoot: string; keyMode: string; stages: Stage[];
 }) {
   const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
+  const [voicings, setVoicings] = useState<Record<string, number>>(() => loadVoicings(songId));
   const chordsStage = stages.find((s) => s.type === "chords");
   const lyricsStage = stages.find((s) => s.type === "lyrics");
   const chords = useQuery({ queryKey: ["stage", chordsStage?.id], queryFn: () => api.getStage(chordsStage!.id), enabled: !!chordsStage });
   const lyrics = useQuery({ queryKey: ["stage", lyricsStage?.id], queryFn: () => api.getStage(lyricsStage!.id), enabled: !!lyricsStage });
 
-  const sheet = useMemo(() => {
-    const cSecs = dataOf(chords.data?.artifact?.content)?.sections ?? [];
-    const lSecs = dataOf(lyrics.data?.artifact?.content)?.sections ?? [];
-    const labels: string[] = [];
-    [...cSecs, ...lSecs].forEach((s: any) => { const l = s.label || s.type; if (l && !labels.includes(l)) labels.push(l); });
-    const sections = labels.map((label) => {
-      const c = cSecs.find((s: any) => (s.label || s.type) === label);
-      const l = lSecs.find((s: any) => (s.label || s.type) === label);
-      return {
-        label,
-        chords: Array.isArray(c?.chords) ? c.chords.map((ch: any) => (typeof ch === "string" ? ch : ch?.name ?? "")) : [],
-        lyrics: Array.isArray(l?.lines) ? l.lines : typeof l?.text === "string" ? l.text.split("\n") : [],
-      };
-    });
-    return playAlongSvg({ title, subtitle, instrument, rootPc: pitchClassOf(keyRoot) ?? 0, mode: keyMode === "major" ? "major" : "minor", sections });
-  }, [chords.data, lyrics.data, title, subtitle, instrument, keyRoot, keyMode]);
+  // section model derived from the editable Chords + Lyrics artifacts (Builder tab)
+  const sections = useMemo(
+    () => deriveSections(dataOf(chords.data?.artifact?.content), dataOf(lyrics.data?.artifact?.content)),
+    [chords.data, lyrics.data],
+  );
+
+  // every distinct chord shown on the sheet — these get a voicing cycler
+  const uniqueChords = useMemo(() => {
+    const set: string[] = [];
+    for (const sec of sections) {
+      const tags: string[] = [];
+      for (const line of sec.lyrics) { const re = /\[([^\]]+)\]/g; let m: RegExpExecArray | null; while ((m = re.exec(line))) tags.push(m[1]); }
+      for (const c of (tags.length ? tags : sec.chords)) if (c && !set.includes(c)) set.push(c);
+    }
+    return set;
+  }, [sections]);
+
+  // voicing index is stored per instrument (guitar voicing vs piano inversion mean
+  // different things), keyed "<instrument>:<chord>". Derive a name→index map for
+  // the current instrument to feed the renderer.
+  const idxOf = (name: string) => voicings[`${instrument}:${name}`] ?? 0;
+  const countOf = (name: string) => Math.max(1, instrument === "guitar" ? guitarCountByName(name) : chordSizeByName(name));
+  const curVoicings = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const name of uniqueChords) out[name] = voicings[`${instrument}:${name}`] ?? 0;
+    return out;
+  }, [voicings, instrument, uniqueChords]);
+
+  const sheet = useMemo(
+    () => playAlongSvg({ title, subtitle, instrument, rootPc: pitchClassOf(keyRoot) ?? 0, mode: keyMode === "major" ? "major" : "minor", sections, voicings: curVoicings }),
+    [sections, instrument, title, subtitle, keyRoot, keyMode, curVoicings],
+  );
+
+  const cycle = (name: string, dir: number) => setVoicings((v) => {
+    const k = `${instrument}:${name}`;
+    const n = countOf(name);
+    const next = (((v[k] ?? 0) + dir) % n + n) % n;
+    const nv = { ...v, [k]: next };
+    try { localStorage.setItem(vkey(songId), JSON.stringify(nv)); } catch { /* ignore */ }
+    return nv;
+  });
 
   return (
     <div>
@@ -45,11 +80,49 @@ export function SongSheet({
           <button className={"sm" + (instrument === "guitar" ? " primary" : "")} onClick={() => setInstrument("guitar")}>Guitar</button>
           <button className={"sm" + (instrument === "piano" ? " primary" : "")} onClick={() => setInstrument("piano")}>Piano</button>
         </div>
-        <button className="primary" onClick={() => downloadPng(sheet.svg, sheet.width, sheet.height, `${title || "song"}.png`)}>⬇ Export PNG</button>
+        <button className="primary" onClick={async () => {
+          const name = `${(title || "song").replace(/[^\w.-]+/g, "_")}.png`;
+          if (inTauri) {
+            const bytes = await pngBytes(sheet.svg, sheet.width, sheet.height);
+            const path = await savePng(name, bytes);
+            if (path) await revealFile(path); // open the containing folder
+          } else {
+            downloadPng(sheet.svg, sheet.width, sheet.height, name);
+          }
+        }}>⬇ Export PNG</button>
       </div>
+
+      {uniqueChords.length > 0 && (
+        <div className="card" style={{ marginBottom: 10 }}>
+          <label>{instrument === "guitar" ? "Voicings" : "Inversions"} — pick the shape shown on the sheet (click ‹ ›)</label>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+            {uniqueChords.map((name) => {
+              const n = countOf(name);
+              const idx = idxOf(name);
+              const sub = instrument === "guitar"
+                ? (guitarFretsByName(name, idx)?.label ?? "—")
+                : (INV_LABELS[idx] ?? `inv ${idx}`);
+              const svg = instrument === "guitar"
+                ? diagramSvgShape(guitarFretsByName(name, idx), name)
+                : pianoVoicedSvg(voicedMidisByName(name, idx), name);
+              return (
+                <div key={name} style={{ border: "1px solid var(--line)", borderRadius: 2, padding: "4px 6px", textAlign: "center" }}>
+                  <div dangerouslySetInnerHTML={{ __html: svg }} />
+                  <div className="row" style={{ justifyContent: "center", gap: 4, alignItems: "center", marginTop: 2 }}>
+                    <button className="sm ghost" disabled={n < 2} title="previous" onClick={() => cycle(name, -1)}>‹</button>
+                    <span className="faint" style={{ fontSize: 11, minWidth: 72 }}>{sub} ({idx + 1}/{n})</span>
+                    <button className="sm ghost" disabled={n < 2} title="next" onClick={() => cycle(name, 1)}>›</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {chords.isLoading || lyrics.isLoading
         ? <div className="empty">Loading…</div>
-        : <div className="card" style={{ overflow: "auto" }} dangerouslySetInnerHTML={{ __html: sheet.svg }} />}
+        : <div className="card" style={{ overflow: "auto", textAlign: "center" }} dangerouslySetInnerHTML={{ __html: sheet.svg }} />}
     </div>
   );
 }

@@ -10,4 +10,9 @@ export type Settings = { claude_model: string, claude_bin: string, mcp_token: st
  * JSON for an extra MCP server (e.g. Ableton) merged into the chat config —
  * `{"command":"uvx","args":["ableton-mcp"]}` or `{"url":"http://..."}`. Empty = off.
  */
-ableton_mcp: string, };
+ableton_mcp: string, 
+/**
+ * Base folder where all song renders live. "+ Add version" opens this folder
+ * so the user drops the generated audio here, keeping all music in one place.
+ */
+music_folder: string, };

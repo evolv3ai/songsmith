@@ -87,6 +87,31 @@ button.sm { padding: 3px 7px; font-size: 11px; }
 .sidebar .spacer { flex: 1; }
 .sidebar .foot { color: var(--ink-faint); font-size: 10px; padding: 8px; }
 
+/* Contextual per-song nav, lives in the sidebar's empty space while in a song */
+.song-nav:not(:empty) { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.song-nav .rail-head { color: var(--ink-faint); font-size: 10px; letter-spacing: 0.08em; padding: 0 8px 6px; }
+.checklist.rail .step { padding: 5px 8px; font-size: 12px; }
+.checklist.rail .step .ord { width: 14px; }
+.song-nav .rail-btn {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  color: var(--ink-dim); padding: 7px 8px; border-radius: var(--r);
+  border: 1px solid transparent; margin-top: 6px; background: none; cursor: pointer;
+  font-family: inherit; font-size: 12px;
+}
+.song-nav .rail-btn:hover { background: var(--paper-3); color: var(--ink); }
+.song-nav .rail-btn.active { background: var(--paper-3); color: var(--accent); border-color: var(--line); }
+
+/* Right inspector flyout — slides over the editor on demand (field drawer / style ctx) */
+.workspace.solo { grid-template-columns: 1fr; }
+.inspector-flyout {
+  position: fixed; top: 0; right: 0; bottom: 44px; width: 360px; z-index: 45;
+  background: var(--paper-2); border-left: 1px solid var(--line);
+  padding: 14px; overflow: auto;
+  transform: translateX(105%); transition: transform 0.18s ease;
+  box-shadow: -10px 0 34px rgba(0, 0, 0, 0.45);
+}
+.inspector-flyout.open { transform: none; }
+
 .main { overflow: auto; padding: 20px 24px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
 .row { display: flex; gap: 8px; align-items: center; }
@@ -193,3 +218,38 @@ button.sm { padding: 3px 7px; font-size: 11px; }
 }
 .chord-cell:hover { border-color: var(--ink-faint); }
 .chord-cell input[type="number"] { font-size: 11px; }
+
+/* Global chat terminal — docked bottom-right, reachable from every page */
+.global-terminal {
+  position: fixed; right: 18px; bottom: 0; width: 440px;
+  max-width: calc(100vw - 36px); z-index: 60;
+  display: flex; flex-direction: column;
+}
+.global-terminal.open { box-shadow: 0 -8px 34px rgba(0, 0, 0, 0.5); }
+.terminal-tab {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; background: var(--accent); color: #11140a;
+  border: 1px solid var(--accent); border-bottom: none;
+  border-radius: var(--r) var(--r) 0 0; font-weight: 600;
+  padding: 8px 12px; cursor: pointer; font-family: var(--mono);
+}
+.terminal-tab:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+.terminal-tab .faint { color: #11140a; opacity: 0.7; }
+.terminal-body {
+  height: 58vh; max-height: 560px; background: var(--paper-2);
+  border: 1px solid var(--line); border-bottom: none; padding: 10px 12px; overflow: hidden;
+}
+.global-terminal .chat { height: 100%; }
+.chat-context {
+  font-size: 11px; padding: 5px 8px; margin-bottom: 8px;
+  border: 1px solid var(--accent-dim); border-radius: var(--r);
+  background: rgba(200, 255, 61, 0.06); color: var(--ink-dim);
+}
+.chat-context b { color: var(--ink); }
+.fit-svg svg { max-width: 100%; height: auto; display: block; }
+.field-chat { position: relative; display: inline-block; }
+.field-chat-pop {
+  position: absolute; left: 0; top: 22px; z-index: 30; width: 320px;
+  background: var(--paper-2); border: 1px solid var(--accent-dim);
+  border-radius: var(--r); padding: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}

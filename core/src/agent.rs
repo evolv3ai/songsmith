@@ -170,6 +170,22 @@ fn build_user_prompt(stage_type: &str, prior: &str, user_input: Option<&str>) ->
     p
 }
 
+/// Refine a single field of a song spec via Claude — returns ONLY the new value
+/// for that field, so the caller can drop it straight into the structured object.
+pub async fn refine_field(settings: &Settings, stage_label: &str, field_label: &str, current: &str, instruction: &str) -> Result<String> {
+    let system = "You refine exactly ONE field of a song's structured spec. Return ONLY the new value for that field — no preamble, no explanation, no markdown code fences, no surrounding quotes. If the field is a list, separate items with ' · '. Keep the same voice and length unless the request says otherwise.";
+    let user = format!(
+        "Stage: {stage_label}\nField: {field_label}\n\nCurrent value:\n{current}\n\nProducer's request: {instruction}\n\nReturn ONLY the new {field_label} value.",
+    );
+    let text = call_claude(settings, system, &user, &|_: String| {}).await?;
+    let t = text.trim();
+    // strip an accidental ```fence``` or wrapping quotes if the model added them
+    let t = t.strip_prefix("```").map(|s| s.trim_start_matches(|c: char| c.is_alphanumeric()).trim()).unwrap_or(t);
+    let t = t.strip_suffix("```").unwrap_or(t).trim();
+    let t = t.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(t);
+    Ok(t.trim().to_string())
+}
+
 /// Generate text with Claude by driving the `claude` CLI headless with
 /// stream-json. Streams text deltas via `on_token`, returns the final answer.
 async fn call_claude<F>(settings: &Settings, system: &str, user: &str, on_token: &F) -> Result<String>

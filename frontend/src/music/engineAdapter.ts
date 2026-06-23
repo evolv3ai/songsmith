@@ -57,11 +57,14 @@ export function guitarCount(rootIdx: number, quality: ChordQuality): number {
 export function guitarFrets(rootIdx: number, quality: ChordQuality, voicingIndex: number): GuitarShape | null {
   const v = guitarVoicing({ root: PITCH_CLASSES[rootIdx], quality, inversion: 0, voicingIndex });
   if (!v.positions) return null; // quality has no shape → caller shows piano
-  const frets = [-1, -1, -1, -1, -1, -1];
+  // the engine indexes strings 0 = high E … 5 = low E (STANDARD_TUNING_MIDI starts
+  // at E4); the diagram renderers expect 0 = low E, so build then reverse.
+  const eng = [-1, -1, -1, -1, -1, -1];
   for (const key of v.positions) {
     const [s, f] = key.split("-").map(Number);
-    if (s >= 0 && s < 6) frets[s] = f;
+    if (s >= 0 && s < 6) eng[s] = f;
   }
+  const frets = eng.reverse(); // → [low E, A, D, G, B, high e]
   const pressed = frets.filter((f) => f > 0);
   const baseFret = pressed.length && Math.max(...pressed) > 4 ? Math.min(...pressed) : 1;
   return { frets, baseFret, label: v.shapeName ?? "voicing" };
@@ -92,4 +95,18 @@ export function guitarCountByName(name: string): number {
 export function guitarFretsByName(name: string, voicingIndex = 0): GuitarShape | null {
   const s = nameToSel(name);
   return s ? guitarFrets(s.rootIdx, s.quality, voicingIndex) : null;
+}
+/** Number of inversions (= chord tones) available for a chord name. */
+export function chordSizeByName(name: string): number {
+  return nameToSel(name)?.pcs.length ?? 0;
+}
+/** Piano voicing as MIDI for a chord name at the given inversion (bass note). */
+export function voicedMidisByName(name: string, inversion = 0): number[] {
+  const s = nameToSel(name);
+  return s ? voicedMidis(s.rootIdx, s.quality, inversion) : [];
+}
+/** Voiced note names low→high for a chord name at the given inversion. */
+export function voicedNotesByName(name: string, inversion = 0): string[] {
+  const s = nameToSel(name);
+  return s ? voicedNotes(s.rootIdx, s.quality, inversion) : [];
 }
