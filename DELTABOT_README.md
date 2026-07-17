@@ -83,8 +83,17 @@ Songsmith calls the `claude` CLI headless (stream-json). Any `claude` on PATH wi
 - cmake ≥3.10 (currently 4.3.2) — winget
 - `claude` CLI signed in
 
+## REAPER Arrange stage skill (deltabot addition)
+
+This branch adds a `reaper` stage skill (`core/src/skills/reaper.md`, seeded in `SEED_SKILLS`) that mirrors the shipped `ableton` skill but drives REAPER through the ReaClaw MCP server (see [evolv3ai/reaclaw@deltabot](https://github.com/evolv3ai/reaclaw/tree/deltabot)). Enabled by default, appears in the app's skills list under **REAPER Arrange**.
+
+**MCP wiring caveat.** Upstream Songsmith hard-codes exactly one "extra" MCP slot named `ableton` in `app/src-tauri/src/lib.rs:266`. Until we add a proper `reaper` slot, plug ReaClaw into the `ableton` slot in Settings → MCP — the tools will be exposed to Claude as `mcp__ableton__reaper_*`, and the skill discovers the prefix dynamically. The right long-term fix is either (a) generalize the extra-slot handling to accept any name, or (b) add a second hard-coded `reaper` slot. Neither is on this branch yet.
+
+**Testing the skill:** create a new song, walk through Concept → Structure → Chords → Lyrics, then on a `reaper`-typed stage select **REAPER Arrange**. With REAPER + ReaClaw running (see the reaclaw fork's DELTABOT_README), Claude will build a tempo/marker/tracks/chord-clip skeleton.
+
 ## Known upstream quirks worth patching if we stay on this fork
 
 - `tauri.conf.json` resource path should be platform-aware (`mcp-shim.exe` on Windows, `mcp-shim` on macOS/Linux) — right now the extensionless copy hack is what fixes it.
 - `mcp-shim/src/main.rs` default DB path is macOS-only.
 - Neither `Makefile` nor `scripts/install.sh` has a Windows equivalent.
+- Extra-MCP handling only supports one slot named `ableton` — should either be generalized to accept a map of named servers, or a second `reaper` slot added, so the REAPER Arrange skill's tools are exposed under an honest prefix.

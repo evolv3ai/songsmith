@@ -79,6 +79,7 @@ const SEED_SKILLS: &[(&str, &str, &str, &str)] = &[
     ("songsmith-prompt", "Generation Prompt", "prompt", include_str!("skills/prompt.md")),
     ("songsmith-style", "Style Builder", "style", include_str!("skills/style.md")),
     ("songsmith-ableton", "Ableton Arrange", "ableton", include_str!("skills/ableton.md")),
+    ("songsmith-reaper", "REAPER Arrange", "reaper", include_str!("skills/reaper.md")),
 ];
 
 fn strip_frontmatter(raw: &str) -> String {
