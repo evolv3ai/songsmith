@@ -97,3 +97,4 @@ This branch adds a `reaper` stage skill (`core/src/skills/reaper.md`, seeded in 
 - `mcp-shim/src/main.rs` default DB path is macOS-only.
 - Neither `Makefile` nor `scripts/install.sh` has a Windows equivalent.
 - Extra-MCP handling only supports one slot named `ableton` — should either be generalized to accept a map of named servers, or a second `reaper` slot added, so the REAPER Arrange skill's tools are exposed under an honest prefix.
+- `find_claude()` was Unix-only (patched on this branch): the original only checked `$HOME`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, and `$SHELL -lc "command -v claude"` — none of which work on Windows. This branch adds `%USERPROFILE%` as a `$HOME` fallback, `.exe`/`.cmd` candidates under `~/.local/bin`, `~/.claude/local`, `%APPDATA%/npm`, `%LOCALAPPDATA%/Programs/claude`, and a `where.exe` fallback so the app finds a claude install anywhere on PATH.

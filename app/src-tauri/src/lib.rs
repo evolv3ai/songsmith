@@ -228,16 +228,51 @@ fn find_claude() -> Option<std::path::PathBuf> {
         let p = std::path::PathBuf::from(p);
         if p.exists() { return Some(p); }
     }
-    let home = std::env::var("HOME").unwrap_or_default();
-    for c in [format!("{home}/.local/bin/claude"), "/opt/homebrew/bin/claude".into(), "/usr/local/bin/claude".into(), "/usr/bin/claude".into()] {
-        let p = std::path::PathBuf::from(&c);
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    let mut candidates: Vec<String> = vec![
+        format!("{home}/.local/bin/claude"),
+        "/opt/homebrew/bin/claude".into(),
+        "/usr/local/bin/claude".into(),
+        "/usr/bin/claude".into(),
+    ];
+    #[cfg(windows)]
+    {
+        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        candidates.extend([
+            format!("{home}/.local/bin/claude.exe"),
+            format!("{home}/.claude/local/claude.exe"),
+            format!("{appdata}/npm/claude.cmd"),
+            format!("{localappdata}/Programs/claude/claude.exe"),
+        ]);
+    }
+    for c in &candidates {
+        let p = std::path::PathBuf::from(c);
         if p.exists() { return Some(p); }
     }
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    if let Ok(out) = std::process::Command::new(shell).args(["-lc", "command -v claude"]).output() {
-        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !path.is_empty() && std::path::Path::new(&path).exists() {
-            return Some(path.into());
+    #[cfg(unix)]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+        if let Ok(out) = std::process::Command::new(shell).args(["-lc", "command -v claude"]).output() {
+            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !path.is_empty() && std::path::Path::new(&path).exists() {
+                return Some(path.into());
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        for name in ["claude.exe", "claude.cmd", "claude.bat"] {
+            if let Ok(out) = std::process::Command::new("where.exe").arg(name).output() {
+                if let Some(line) = String::from_utf8_lossy(&out.stdout).lines().next() {
+                    let path = line.trim();
+                    if !path.is_empty() && std::path::Path::new(path).exists() {
+                        return Some(path.into());
+                    }
+                }
+            }
         }
     }
     None
